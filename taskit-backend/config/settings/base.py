@@ -119,6 +119,24 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SITE_ID = 1
 AUTH_USER_MODEL = "accounts.User"
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@taskit.local")
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = config("EMAIL_HOST", default="")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default="True").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+EMAIL_VERIFICATION_ENABLED = config(
+    "EMAIL_VERIFICATION_ENABLED",
+    default="False",
+).lower() in {"1", "true", "yes", "on"}
 ADMIN_EMAIL = config("ADMIN_EMAIL", default="admin@taskit.co.ke")
 KYC_MOCK = config("KYC_MOCK", default="True").lower() in {"1", "true", "yes", "on"}
 KYC_FACE_MATCH_THRESHOLD = config("KYC_FACE_MATCH_THRESHOLD", default="75")

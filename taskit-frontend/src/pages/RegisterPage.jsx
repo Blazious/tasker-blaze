@@ -20,6 +20,8 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(true)
 
   const updateField = (event) => {
     setForm((current) => ({
@@ -45,7 +47,7 @@ export default function RegisterPage() {
 
     setIsLoading(true)
     try {
-      await register({
+      const response = await register({
         email,
         password: form.password,
         full_name: form.full_name.trim(),
@@ -53,6 +55,8 @@ export default function RegisterPage() {
         gender: form.gender,
       })
       setRegisteredEmail(email)
+      setSuccessMessage(response.message || 'Account created successfully.')
+      setEmailVerificationRequired(response.email_verification_required !== false)
     } catch (submissionError) {
       setError(getApiErrorMessage(submissionError, 'Registration failed. Please try again.'))
     } finally {
@@ -67,9 +71,17 @@ export default function RegisterPage() {
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-white">
             <MailCheck size={28} />
           </div>
-          <h1 className="text-2xl font-semibold text-text-dark">📧 Check your JKUAT email!</h1>
+          <h1 className="text-2xl font-semibold text-text-dark">
+            {emailVerificationRequired ? 'Check your JKUAT email!' : 'Account created!'}
+          </h1>
           <p className="mt-3 text-text-muted">
-            We sent a verification link to <span className="font-semibold text-text-dark">{registeredEmail}</span>. Click it to activate your account.
+            {emailVerificationRequired ? (
+              <>
+                We sent a verification link to <span className="font-semibold text-text-dark">{registeredEmail}</span>. Click it to activate your account.
+              </>
+            ) : (
+              successMessage
+            )}
           </p>
           <Link
             to="/login"

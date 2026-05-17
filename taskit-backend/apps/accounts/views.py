@@ -42,10 +42,25 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+
+        if not settings.EMAIL_VERIFICATION_ENABLED:
+            user.is_verified = True
+            user.save(update_fields=["is_verified"])
+            return Response(
+                {
+                    "message": "Account created successfully. You can log in now.",
+                    "email_verification_required": False,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
         self.send_verification_email(request, user)
 
         return Response(
-            {"message": "Check your JKUAT email to verify your account."},
+            {
+                "message": "Check your JKUAT email to verify your account.",
+                "email_verification_required": True,
+            },
             status=status.HTTP_201_CREATED,
         )
 
