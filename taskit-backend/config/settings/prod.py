@@ -10,6 +10,7 @@ ALLOWED_HOSTS = config(
     default="",
     cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
 )
+ALLOWED_HOSTS.append("healthcheck.railway.app")
 
 DATABASES = {
     "default": dj_database_url.config(
