@@ -25,12 +25,18 @@ CORS_ALLOWED_ORIGINS = config(
     default="",
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
+for origin in ["https://tasker-blaze.vercel.app"]:
+    if origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(origin)
 
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default="",
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
+for origin in ["https://tasker-blaze.vercel.app"]:
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
