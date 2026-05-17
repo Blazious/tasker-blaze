@@ -1,5 +1,4 @@
 import cloudinary
-from django.conf import settings
 from rest_framework import serializers
 
 from .models import Bid, Task, TaskCategory
@@ -174,6 +173,15 @@ class TaskSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Authentication is required.")
             if not user.is_verified:
                 raise serializers.ValidationError("Only verified users can post tasks.")
+            if attrs.get("task_photo") and not cloudinary.config().api_key:
+                raise serializers.ValidationError(
+                    {
+                        "task_photo": (
+                            "Task photo uploads are not configured on the server yet. "
+                            "Remove the photo or add Cloudinary credentials."
+                        )
+                    }
+                )
 
         budget_min = attrs.get("budget_min", getattr(self.instance, "budget_min", None))
         budget_max = attrs.get("budget_max", getattr(self.instance, "budget_max", None))
@@ -223,12 +231,6 @@ class TaskSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        if (
-            settings.DEBUG
-            and validated_data.get("task_photo")
-            and not cloudinary.config().api_key
-        ):
-            validated_data.pop("task_photo", None)
         return Task.objects.create(client=self.context["request"].user, **validated_data)
 
 
