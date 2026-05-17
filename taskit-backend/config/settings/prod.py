@@ -48,6 +48,7 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default="True").lower() in {
     "yes",
     "on",
 }
+SECURE_REDIRECT_EXEMPT = [r"^health/$"]
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SECURE_HSTS_SECONDS = 31536000
