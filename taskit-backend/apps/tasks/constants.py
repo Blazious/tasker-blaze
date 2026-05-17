@@ -1,0 +1,17 @@
+JKUAT_LANDMARK_CHOICES = [
+    ("Main Gate", "Main Gate"),
+    ("Back Gate", "Back Gate"),
+    ("Library", "Library"),
+    ("Administration Block", "Administration Block"),
+    ("Engineering Block", "Engineering Block"),
+    ("ICT Centre", "ICT Centre"),
+    ("Health Centre", "Health Centre"),
+    ("Hostels Block A", "Hostels Block A"),
+    ("Hostels Block B", "Hostels Block B"),
+    ("Hostels Block C", "Hostels Block C"),
+    ("Hostels Block D", "Hostels Block D"),
+    ("Mess/Dining Hall", "Mess/Dining Hall"),
+    ("Sports Ground", "Sports Ground"),
+    ("JKUAT Town Stage", "JKUAT Town Stage"),
+    ("Other (specify in notes)", "Other (specify in notes)"),
+]

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="rocket" x1="25" x2="46" y1="5" y2="33" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1f6b47" />
+      <stop offset="1" stop-color="#0f3a29" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#f8fafc" />
+  <path fill="#f59e0b" d="M22 39c-6 1-10 4-13 11 4-1 8-1 11 1-2 2-4 5-5 9 8-2 14-6 17-12 2-4 3-8 2-12-4 2-8 3-12 3Z" />
+  <path fill="url(#rocket)" d="M33 6c10-4 18-3 24-1 1 7 1 15-3 24-4 11-12 19-23 27L16 41c5-14 11-26 17-35Z" />
+  <path fill="#123d2d" d="M57 5c0 7-2 13-5 19L39 11c6-3 12-5 18-6Z" />
+  <circle cx="40" cy="23" r="6" fill="#f8fafc" />
+  <path fill="#1a4731" d="M15 33c-7 0-13 2-18 9l-3 4 17-2 10-10c-2-1-4-1-6-1Z" transform="translate(6 -2)" />
+  <path fill="#1a4731" d="M42 39c0 7-3 13-9 18l-4 3 2-17 10-10c1 2 1 4 1 6Z" />
+</svg>
