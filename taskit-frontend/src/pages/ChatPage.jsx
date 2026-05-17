@@ -19,6 +19,7 @@ import {
 import { getMessages, sendMessage } from '../api/chat.js'
 import { getTask } from '../api/tasks.js'
 import { useAuthStore } from '../store/authStore.js'
+import { API_BASE_URL } from '../api/axios.js'
 import EmptyState from '../components/EmptyState.jsx'
 import ReportUserModal from '../components/ReportUserModal.jsx'
 
@@ -100,7 +101,9 @@ export default function ChatPage() {
   useEffect(() => {
     if (!accessToken || !numericTaskId) return undefined
 
-    const socket = new WebSocket(`ws://localhost:8000/ws/chat/${numericTaskId}/?token=${accessToken}`)
+    const wsBaseUrl = import.meta.env.VITE_WS_BASE_URL
+      || API_BASE_URL.replace(/^https/, 'wss').replace(/^http/, 'ws').replace(/\/api\/v1\/?$/, '')
+    const socket = new WebSocket(`${wsBaseUrl}/ws/chat/${numericTaskId}/?token=${accessToken}`)
     socketRef.current = socket
 
     socket.onopen = () => setIsFallbackPolling(false)

@@ -1,3 +1,4 @@
+import dj_database_url
 from decouple import config
 
 from .base import *
@@ -11,14 +12,11 @@ ALLOWED_HOSTS = config(
 )
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("POSTGRES_DB", default="taskit"),
-        "USER": config("POSTGRES_USER", default="taskit"),
-        "PASSWORD": config("POSTGRES_PASSWORD", default=""),
-        "HOST": config("POSTGRES_HOST", default="localhost"),
-        "PORT": config("POSTGRES_PORT", default="5432"),
-    }
+    "default": dj_database_url.config(
+        default=config("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True,
+    )
 }
 
 CORS_ALLOWED_ORIGINS = config(
@@ -26,3 +24,31 @@ CORS_ALLOWED_ORIGINS = config(
     default="",
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
+
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="",
+    cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
+)
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+MIDDLEWARE.insert(
+    MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+)
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default="True").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SECURE_HSTS_SECONDS = 31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True

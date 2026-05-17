@@ -229,6 +229,51 @@ npm run build
 11. Review/report if needed.
 12. Check `/billing` for tracked platform fees.
 
+## Railway Deployment
+
+The backend is Railway-ready from `taskit-backend/railway.json`.
+
+Recommended Railway services:
+
+- Django backend service with root directory `taskit-backend`
+- PostgreSQL service
+- Redis service
+
+Backend service variables:
+
+```env
+DJANGO_SETTINGS_MODULE=config.settings.prod
+DEBUG=False
+SECRET_KEY=your-production-secret
+ALLOWED_HOSTS=your-backend.up.railway.app
+CORS_ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+CSRF_TRUSTED_ORIGINS=https://your-vercel-app.vercel.app
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+ECONFIRM_API_KEY=your-econfirm-key
+ECONFIRM_BASE_URL=https://econfirm.co.ke/api/v1
+ECONFIRM_CALLBACK_URL=https://your-backend.up.railway.app/api/v1/payments/econfirm-callback/
+ECONFIRM_MOCK=False
+PLATFORM_FEE_PERCENT=10
+GEMINI_API_KEY=your-gemini-key
+GEMINI_MODEL=gemini-2.5-flash
+MINDEE_API_KEY=your-mindee-key
+MINDEE_ENDPOINT_URL=your-mindee-endpoint
+CLOUDINARY_CLOUD_NAME=your-cloudinary-cloud
+CLOUDINARY_API_KEY=your-cloudinary-key
+CLOUDINARY_API_SECRET=your-cloudinary-secret
+ADMIN_EMAIL=your-email
+```
+
+Vercel frontend variables:
+
+```env
+VITE_API_BASE_URL=https://your-backend.up.railway.app/api/v1
+VITE_WS_BASE_URL=wss://your-backend.up.railway.app
+```
+
+After deployment, update eConfirm's callback URL to the Railway backend callback URL.
+
 ## Notes
 
 - eConfirm live API requires valid Kenyan mobile phone numbers on user profiles.

@@ -16,4 +16,3 @@ requests==2.32.3
 daphne==4.1.2
 dj-database-url==2.2.0
 whitenoise==6.7.0
-```
