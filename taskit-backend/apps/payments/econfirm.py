@@ -10,6 +10,34 @@ logger = logging.getLogger(__name__)
 KENYAN_MOBILE_PATTERN = re.compile(r"^254[17]\d{8}$")
 
 
+def mask_value(value):
+    text = str(value)
+    if not text:
+        return text
+    if "@" in text:
+        name, _, domain = text.partition("@")
+        return f"{name[:2]}***@{domain}"
+    digits = "".join(char for char in text if char.isdigit())
+    if len(digits) >= 9:
+        return f"{digits[:5]}***{digits[-3:]}"
+    return "***"
+
+
+def sanitize_for_logs(value):
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in value.items():
+            key_lower = key.lower()
+            if any(marker in key_lower for marker in ("phone", "email", "msisdn", "payer", "buyer", "seller", "receiver", "recipient")):
+                sanitized[key] = mask_value(item)
+            else:
+                sanitized[key] = sanitize_for_logs(item)
+        return sanitized
+    if isinstance(value, list):
+        return [sanitize_for_logs(item) for item in value]
+    return value
+
+
 def normalize_kenyan_phone(phone_number):
     digits = "".join(char for char in str(phone_number) if char.isdigit())
     if digits.startswith("2540") and len(digits) == 13:
@@ -180,6 +208,7 @@ class EconfirmClient:
 
     def _post(self, path, payload, error_message):
         try:
+            logger.warning("eConfirm request %s payload=%s", path, sanitize_for_logs(payload))
             response = requests.post(
                 f"{self.base_url}{path}",
                 json=payload,
@@ -187,7 +216,15 @@ class EconfirmClient:
                 timeout=30,
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            logger.warning("eConfirm response %s data=%s", path, sanitize_for_logs(data))
+            if data.get("success") is False:
+                message = data.get("message") or data.get("error") or "Request was rejected by eConfirm"
+                errors = data.get("errors")
+                if errors:
+                    message = f"{message}: {errors}"
+                raise ValidationError(f"{error_message}: {message}")
+            return data
         except requests.RequestException as exc:
             logger.exception("eConfirm API error on %s", path)
             response = getattr(exc, "response", None)
