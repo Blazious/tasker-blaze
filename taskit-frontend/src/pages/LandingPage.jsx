@@ -20,8 +20,8 @@ const heroImages = [
   CAMPUS_BACKGROUNDS.walkway.src,
   CAMPUS_BACKGROUNDS.gate.src,
   CAMPUS_BACKGROUNDS.pau.src,
-  'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1800&q=85',
-  'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?auto=format&fit=crop&w=1800&q=85',
+  'https://images.pexels.com/photos/6238198/pexels-photo-6238198.jpeg?auto=compress&cs=tinysrgb&w=1800',
+  'https://images.pexels.com/photos/7972313/pexels-photo-7972313.jpeg?auto=compress&cs=tinysrgb&w=1800',
 ]
 
 const taskStories = [
@@ -30,7 +30,7 @@ const taskStories = [
     copy: 'Post pickup, washing, drying, or ironing tasks and choose the student bid that feels right.',
     icon: WashingMachine,
     image:
-      'https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?auto=format&fit=crop&w=900&q=80',
+      'https://images.pexels.com/photos/6238009/pexels-photo-6238009.jpeg?auto=compress&cs=tinysrgb&w=900',
   },
   {
     title: 'Food pickup',
@@ -44,14 +44,14 @@ const taskStories = [
     copy: 'Move parcels, printouts, thrift finds, and quick campus errands between landmarks.',
     icon: Bike,
     image:
-      'https://images.unsplash.com/photo-1617347454431-f49d7ff5c3b1?auto=format&fit=crop&w=900&q=80',
+      'https://images.pexels.com/photos/7683730/pexels-photo-7683730.jpeg?auto=compress&cs=tinysrgb&w=900',
   },
   {
     title: 'Room cleaning',
     copy: 'Ask for help with cleaning tasks while keeping safety notes hidden until a tasker is assigned.',
     icon: Sparkles,
     image:
-      'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80',
+      'https://images.pexels.com/photos/7972313/pexels-photo-7972313.jpeg?auto=compress&cs=tinysrgb&w=900',
   },
 ]
 
@@ -228,7 +228,7 @@ export default function LandingPage() {
             </div>
             <div className="relative min-h-80">
               <img
-                src="https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?auto=format&fit=crop&w=1000&q=80"
+                src="https://images.pexels.com/photos/6238198/pexels-photo-6238198.jpeg?auto=compress&cs=tinysrgb&w=1000"
                 alt="Student completing a task with phone coordination"
                 className="absolute inset-0 h-full w-full object-cover"
               />

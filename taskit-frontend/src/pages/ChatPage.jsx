@@ -158,7 +158,7 @@ export default function ChatPage() {
     }
   }
 
-  const useQuickReply = (reply) => {
+  const handleQuickReply = (reply) => {
     setDraft(reply)
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: 'typing', is_typing: true }))
@@ -263,7 +263,7 @@ export default function ChatPage() {
   return (
     <section className="relative mx-auto flex h-[calc(100vh-140px)] max-w-5xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-[#071c15] shadow-sm">
       <img
-        src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1800&q=85"
+        src="https://images.pexels.com/photos/7972313/pexels-photo-7972313.jpeg?auto=compress&cs=tinysrgb&w=1800"
         alt=""
         className="absolute inset-0 h-full w-full object-cover opacity-75"
       />
@@ -407,7 +407,7 @@ export default function ChatPage() {
                     key={reply}
                     type="button"
                     onClick={() => {
-                      useQuickReply(reply)
+                      handleQuickReply(reply)
                       setShowQuickReplies(false)
                     }}
                     className="shrink-0 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-text-dark hover:border-primary hover:text-primary"

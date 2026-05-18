@@ -7,6 +7,7 @@ import { activateTasker, getMe, getStats, updateAvailability } from '../api/auth
 import { useAuthStore } from '../store/authStore.js'
 import { CAMPUS_BACKGROUNDS } from '../constants/campusImages.js'
 import LocationShareButton from '../components/LocationShareButton.jsx'
+import InviteButton from '../components/InviteButton.jsx'
 import { AVAILABILITY_OPTIONS, getAvailabilityClass, getAvailabilityLabel } from '../constants/availability.js'
 
 const statCards = [
@@ -89,6 +90,7 @@ export default function DashboardPage() {
           <Link to="/profile/edit" className="inline-flex items-center gap-2 rounded-md border border-white/30 bg-white/10 px-4 py-2 font-medium text-white backdrop-blur hover:bg-white/20">
             Edit Profile
           </Link>
+          <InviteButton className="inline-flex items-center gap-2 rounded-md bg-[#25D366] px-4 py-2 font-medium text-white hover:bg-[#1ebe5d]" />
         </div>
         </div>
       </div>

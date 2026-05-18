@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore.js'
 import { getUnreadCount } from '../api/notifications.js'
 import taskitLogo from '../assets/taskit-logo.svg'
+import InviteButton from './InviteButton.jsx'
 
 const navItems = [
   { label: 'Tasks', to: '/tasks' },
@@ -88,7 +89,8 @@ function Navbar() {
           ))}
         </div>
 
-        <div className="hidden md:block">
+        <div className="hidden items-center gap-2 md:flex">
+          <InviteButton className="inline-flex items-center gap-2 rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white hover:bg-[#1ebe5d]" />
           {isAuthenticated ? (
             <button
               type="button"
@@ -142,6 +144,7 @@ function Navbar() {
                 )}
               </NavLink>
             ))}
+            <InviteButton className="rounded-md bg-[#25D366] px-3 py-2 text-left text-sm font-medium text-white" />
             <button
               type="button"
               onClick={handleLogout}
