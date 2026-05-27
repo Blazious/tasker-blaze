@@ -10,7 +10,14 @@ ALLOWED_HOSTS = config(
     default="",
     cast=lambda value: [host.strip() for host in value.split(",") if host.strip()],
 )
-ALLOWED_HOSTS.append("healthcheck.railway.app")
+for host in [
+    "healthcheck.railway.app",
+    ".up.railway.app",
+    ".railway.app",
+    config("RAILWAY_PUBLIC_DOMAIN", default=""),
+]:
+    if host and host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
 
 DATABASES = {
     "default": dj_database_url.config(
@@ -25,8 +32,11 @@ CORS_ALLOWED_ORIGINS = config(
     default="",
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
-for origin in ["https://tasker-blaze.vercel.app"]:
-    if origin not in CORS_ALLOWED_ORIGINS:
+for origin in [
+    "https://tasker-blaze.vercel.app",
+    config("FRONTEND_URL", default=""),
+]:
+    if origin and origin not in CORS_ALLOWED_ORIGINS:
         CORS_ALLOWED_ORIGINS.append(origin)
 
 CSRF_TRUSTED_ORIGINS = config(
@@ -34,8 +44,11 @@ CSRF_TRUSTED_ORIGINS = config(
     default="",
     cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
 )
-for origin in ["https://tasker-blaze.vercel.app"]:
-    if origin not in CSRF_TRUSTED_ORIGINS:
+for origin in [
+    "https://tasker-blaze.vercel.app",
+    config("FRONTEND_URL", default=""),
+]:
+    if origin and origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(origin)
 
 STATIC_URL = "/static/"
