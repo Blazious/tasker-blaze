@@ -5,6 +5,15 @@ from .base import *
 
 DEBUG = False
 
+
+def normalize_origin(origin):
+    return origin.strip().rstrip("/")
+
+
+def parse_origin_list(value):
+    return [normalize_origin(origin) for origin in value.split(",") if origin.strip()]
+
+
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS",
     default="",
@@ -30,11 +39,11 @@ DATABASES = {
 CORS_ALLOWED_ORIGINS = config(
     "CORS_ALLOWED_ORIGINS",
     default="",
-    cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
+    cast=parse_origin_list,
 )
 for origin in [
     "https://tasker-blaze.vercel.app",
-    config("FRONTEND_URL", default=""),
+    normalize_origin(config("FRONTEND_URL", default="")),
 ]:
     if origin and origin not in CORS_ALLOWED_ORIGINS:
         CORS_ALLOWED_ORIGINS.append(origin)
@@ -42,11 +51,11 @@ for origin in [
 CSRF_TRUSTED_ORIGINS = config(
     "CSRF_TRUSTED_ORIGINS",
     default="",
-    cast=lambda value: [origin.strip() for origin in value.split(",") if origin.strip()],
+    cast=parse_origin_list,
 )
 for origin in [
     "https://tasker-blaze.vercel.app",
-    config("FRONTEND_URL", default=""),
+    normalize_origin(config("FRONTEND_URL", default="")),
 ]:
     if origin and origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(origin)
