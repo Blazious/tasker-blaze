@@ -14,7 +14,8 @@ from apps.tasks.models import Bid, Task
 from .billing import billing_summary, generate_invoice_for_month
 from .econfirm import EconfirmClient
 from .escrow import flag_dispute, hold_funds, release_funds
-from .models import DisputeNote, Transaction
+from .intasend import IntaSendClient, mark_invoice_payment_failed, mark_invoice_payment_paid
+from .models import DisputeNote, PlatformInvoice, PlatformInvoicePayment, Transaction
 from .serializers import DisputeCreateSerializer, TransactionSerializer
 
 logger = logging.getLogger(__name__)
@@ -400,6 +401,104 @@ class PlatformBillingSummaryView(APIView):
         summary = billing_summary(request.user)
         summary["generated_invoice_id"] = invoice.id if invoice else None
         return Response(summary)
+
+
+class PayPlatformInvoiceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, invoice_id):
+        invoice = get_object_or_404(PlatformInvoice, pk=invoice_id, tasker=request.user)
+        if invoice.status == PlatformInvoice.Status.PAID:
+            return Response({"message": "Invoice is already paid.", "status": invoice.status})
+        if invoice.status != PlatformInvoice.Status.PENDING:
+            raise ValidationError("Only pending invoices can be paid.")
+
+        phone_number = request.data.get("phone_number") or request.user.phone_number
+        payment = IntaSendClient().send_invoice_stk_push(invoice, phone_number)
+        return Response(
+            {
+                "message": "STK push sent. Enter your M-Pesa PIN to pay the invoice.",
+                "payment_id": payment.id,
+                "invoice_id": invoice.id,
+                "status": payment.status,
+                "provider_invoice_id": payment.provider_invoice_id,
+            }
+        )
+
+
+class PlatformInvoicePaymentStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, invoice_id):
+        invoice = get_object_or_404(PlatformInvoice, pk=invoice_id, tasker=request.user)
+        payment = invoice.payments.order_by("-created_at").first()
+        if payment is None:
+            return Response({"invoice_status": invoice.status, "payment_status": None})
+
+        if payment.status in (
+            PlatformInvoicePayment.Status.PENDING,
+            PlatformInvoicePayment.Status.PROCESSING,
+        ):
+            status_payload = IntaSendClient().check_payment_status(payment)
+            state = str(status_payload.get("state") or status_payload.get("status") or "").upper()
+            if state == "COMPLETE":
+                mark_invoice_payment_paid(payment, status_payload)
+                invoice.refresh_from_db()
+            elif state == "FAILED":
+                mark_invoice_payment_failed(
+                    payment,
+                    status_payload,
+                    status_payload.get("failed_reason", ""),
+                )
+
+        payment.refresh_from_db()
+        return Response(
+            {
+                "invoice_status": invoice.status,
+                "payment_status": payment.status,
+                "payment_id": payment.id,
+                "provider_invoice_id": payment.provider_invoice_id,
+                "paid_at": payment.paid_at,
+            }
+        )
+
+
+class IntaSendInvoiceCallbackView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        payload = request.data
+        expected_challenge = settings.INTASEND_WEBHOOK_CHALLENGE
+        if expected_challenge and payload.get("challenge") != expected_challenge:
+            raise PermissionDenied("Invalid IntaSend webhook challenge.")
+
+        api_ref = payload.get("api_ref", "")
+        payment = PlatformInvoicePayment.objects.select_related("invoice").filter(
+            api_ref=api_ref,
+        ).first()
+        if payment is None:
+            return Response({"detail": "Payment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        provider_invoice_id = payload.get("invoice_id")
+        if provider_invoice_id and not payment.provider_invoice_id:
+            payment.provider_invoice_id = provider_invoice_id
+
+        state = str(payload.get("state", "")).upper()
+        if state == "COMPLETE":
+            mark_invoice_payment_paid(payment, payload)
+        elif state == "FAILED":
+            mark_invoice_payment_failed(
+                payment,
+                payload,
+                payload.get("failed_reason", ""),
+            )
+        elif state in {"PENDING", "PROCESSING"}:
+            payment.status = PlatformInvoicePayment.Status.PROCESSING
+            payment.raw_callback = payload
+            payment.save(update_fields=["provider_invoice_id", "status", "raw_callback", "updated_at"])
+
+        return Response({"status": "ok"})
 
 
 class MockConfirmPaymentView(APIView):

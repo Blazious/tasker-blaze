@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DisputeNote, EscrowLedger, PlatformFeeUsage, PlatformInvoice, Transaction
+from .models import DisputeNote, EscrowLedger, PlatformFeeUsage, PlatformInvoice, PlatformInvoicePayment, Transaction
 
 
 @admin.register(Transaction)
@@ -58,3 +58,11 @@ class PlatformInvoiceAdmin(admin.ModelAdmin):
     list_filter = ("status", "billing_month", "due_date")
     search_fields = ("tasker__email", "notes")
     readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(PlatformInvoicePayment)
+class PlatformInvoicePaymentAdmin(admin.ModelAdmin):
+    list_display = ("invoice", "tasker", "amount", "provider", "status", "provider_invoice_id", "created_at")
+    list_filter = ("provider", "status", "created_at")
+    search_fields = ("api_ref", "provider_invoice_id", "checkout_id", "tasker__email")
+    readonly_fields = ("created_at", "updated_at", "paid_at", "raw_response", "raw_callback")

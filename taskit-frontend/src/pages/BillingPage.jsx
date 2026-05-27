@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, CreditCard, Loader2, ReceiptText, ShieldAlert } from 'lucide-react'
+import { CalendarClock, CreditCard, Loader2, ReceiptText, ShieldAlert, Smartphone } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { generatePlatformInvoice, getPlatformBilling } from '../api/payments.js'
+import { generatePlatformInvoice, getPlatformBilling, getPlatformInvoicePaymentStatus, payPlatformInvoice } from '../api/payments.js'
 import { useAuthStore } from '../store/authStore.js'
 
 export default function BillingPage() {
@@ -17,6 +17,20 @@ export default function BillingPage() {
     onSuccess: (data) => {
       queryClient.setQueryData(['platform-billing'], data)
       toast.success(data.generated_invoice_id ? 'Invoice generated.' : 'No billable fees yet.')
+    },
+  })
+  const payInvoiceMutation = useMutation({
+    mutationFn: (invoiceId) => payPlatformInvoice(invoiceId),
+    onSuccess: (data) => {
+      toast.success(data.message || 'STK push sent.')
+      queryClient.invalidateQueries({ queryKey: ['platform-billing'] })
+    },
+  })
+  const checkInvoiceMutation = useMutation({
+    mutationFn: getPlatformInvoicePaymentStatus,
+    onSuccess: (data) => {
+      toast.success(data.invoice_status === 'PAID' ? 'Invoice paid.' : `Payment status: ${data.payment_status || 'Not started'}`)
+      queryClient.invalidateQueries({ queryKey: ['platform-billing'] })
     },
   })
 
@@ -123,6 +137,28 @@ export default function BillingPage() {
                 <p className={`mt-2 text-sm ${invoice.is_overdue ? 'text-red-700' : 'text-text-muted'}`}>
                   Due {new Date(invoice.due_date).toLocaleString()}
                 </p>
+                {invoice.latest_payment_status && (
+                  <p className="mt-1 text-xs font-semibold text-text-muted">Payment: {invoice.latest_payment_status}</p>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => payInvoiceMutation.mutate(invoice.id)}
+                    disabled={payInvoiceMutation.isPending}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                  >
+                    {payInvoiceMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Smartphone size={14} />}
+                    Pay Invoice
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => checkInvoiceMutation.mutate(invoice.id)}
+                    disabled={checkInvoiceMutation.isPending}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-text-dark disabled:opacity-60"
+                  >
+                    Check
+                  </button>
+                </div>
               </div>
             ))}
             {(billing?.pending_invoices ?? []).length === 0 && <p className="rounded-lg bg-slate-50 p-4 text-sm text-text-muted">No pending invoices.</p>}

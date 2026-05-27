@@ -146,7 +146,12 @@ def billing_summary(user):
                 "due_date": invoice.due_date,
                 "is_overdue": invoice.is_overdue,
                 "status": invoice.status,
+                "latest_payment_status": (
+                    invoice.payments.order_by("-created_at").first().status
+                    if invoice.payments.exists()
+                    else None
+                ),
             }
-            for invoice in pending_invoices.order_by("-created_at")
+            for invoice in pending_invoices.prefetch_related("payments").order_by("-created_at")
         ],
     }

@@ -206,3 +206,45 @@ class PlatformInvoice(models.Model):
 
     def __str__(self):
         return f"{self.tasker} invoice KES {self.amount} due {self.due_date:%Y-%m-%d}"
+
+
+class PlatformInvoicePayment(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PROCESSING = "PROCESSING", "Processing"
+        PAID = "PAID", "Paid"
+        FAILED = "FAILED", "Failed"
+
+    invoice = models.ForeignKey(
+        PlatformInvoice,
+        on_delete=models.CASCADE,
+        related_name="payments",
+    )
+    tasker = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="platform_invoice_payments",
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    provider = models.CharField(max_length=50, default="INTASEND")
+    api_ref = models.CharField(max_length=120, unique=True)
+    provider_invoice_id = models.CharField(max_length=120, blank=True)
+    checkout_id = models.CharField(max_length=120, blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    raw_response = models.JSONField(default=dict, blank=True)
+    raw_callback = models.JSONField(default=dict, blank=True)
+    failure_reason = models.TextField(blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.provider} payment {self.api_ref} for invoice #{self.invoice_id}"

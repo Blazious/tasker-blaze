@@ -184,6 +184,17 @@ ECONFIRM_MOCK = config("ECONFIRM_MOCK", default="False").lower() in {
     "on",
 }
 
+INTASEND_SECRET_KEY = config("INTASEND_SECRET_KEY", default="")
+INTASEND_PUBLISHABLE_KEY = config("INTASEND_PUBLISHABLE_KEY", default="")
+INTASEND_BASE_URL = config("INTASEND_BASE_URL", default="https://api.intasend.com/api/v1")
+INTASEND_TEST_MODE = config("INTASEND_TEST_MODE", default="True").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+INTASEND_WEBHOOK_CHALLENGE = config("INTASEND_WEBHOOK_CHALLENGE", default="")
+
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
 GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")
 GEMINI_HTTP_TIMEOUT = config("GEMINI_HTTP_TIMEOUT", default=30, cast=int)

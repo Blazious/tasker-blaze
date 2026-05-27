@@ -4,6 +4,7 @@ from .views import (
     DisputePaymentView,
     EconfirmCallbackView,
     ConfirmEscrowFundedView,
+    IntaSendInvoiceCallbackView,
     InitiatePaymentView,
     MockConfirmPaymentView,
     MyEarningsView,
@@ -11,7 +12,9 @@ from .views import (
     PaymentStatusView,
     PaymentsHealthView,
     PlatformBillingSummaryView,
+    PlatformInvoicePaymentStatusView,
     PesapalIPNCallbackView,
+    PayPlatformInvoiceView,
     ReleasePaymentView,
 )
 
@@ -27,6 +30,9 @@ urlpatterns = [
     path("my-earnings/", MyEarningsView.as_view(), name="my-earnings"),
     path("my-spending/", MySpendingView.as_view(), name="my-spending"),
     path("platform-billing/", PlatformBillingSummaryView.as_view(), name="platform-billing"),
+    path("platform-invoices/<int:invoice_id>/pay/", PayPlatformInvoiceView.as_view(), name="pay-platform-invoice"),
+    path("platform-invoices/<int:invoice_id>/status/", PlatformInvoicePaymentStatusView.as_view(), name="platform-invoice-payment-status"),
+    path("intasend/invoice-callback/", IntaSendInvoiceCallbackView.as_view(), name="intasend-invoice-callback"),
     path(
         "mock-confirm/<int:transaction_id>/",
         MockConfirmPaymentView.as_view(),
