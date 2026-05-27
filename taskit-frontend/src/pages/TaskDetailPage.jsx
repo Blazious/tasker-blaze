@@ -233,7 +233,6 @@ export default function TaskDetailPage() {
   const matchesGenderPreference = taskerMatchesPreference(task?.preferred_tasker_gender, user?.gender)
   const canSeeBids = Boolean(task && (isClient || isTasker))
   const taskPosition = task ? getTaskPosition(task) : null
-  const isAssignedTasker = Boolean(task?.assigned_tasker_id === user?.id)
 
   const bidsQuery = useQuery({
     queryKey: ['task-bids', taskId],
@@ -250,6 +249,7 @@ export default function TaskDetailPage() {
     [bids, user?.id],
   )
   const acceptedBid = bids.find((bid) => bid.status === 'ACCEPTED')
+  const isAssignedTasker = Boolean(task?.assigned_tasker_id === user?.id || myBid?.status === 'ACCEPTED')
   const taskerProfileQuery = useQuery({
     queryKey: ['tasker-mini-profile', selectedTaskerId],
     queryFn: () => getUserProfile(selectedTaskerId),
