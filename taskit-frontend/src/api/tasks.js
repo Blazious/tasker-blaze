@@ -40,8 +40,8 @@ export const placeBid = async (taskId, data) => {
   return response.data
 }
 
-export const acceptBid = async (taskId, bidId) => {
-  const response = await api.post(`/tasks/${taskId}/bids/${bidId}/accept/`)
+export const acceptBid = async (taskId, bidId, data = {}) => {
+  const response = await api.post(`/tasks/${taskId}/bids/${bidId}/accept/`, data)
   return response.data
 }
 

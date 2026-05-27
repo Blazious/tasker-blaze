@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { Grid2X2, ListFilter, Loader2, Map as MapIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
+import { Circle, MapContainer, Marker, Popup, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -13,6 +13,7 @@ import EmptyState from '../components/EmptyState.jsx'
 import { SkeletonCard } from '../components/Skeleton.jsx'
 import { getCategories, getTasks } from '../api/tasks.js'
 import { getTaskPosition, JKUAT_CENTER, LANDMARKS } from '../constants/landmarks.js'
+import { JKUAT_GEOFENCE_CENTER, JKUAT_SERVICE_RADIUS_METERS } from '../constants/geofence.js'
 import { GENDER_PREFERENCES } from '../constants/genderPreference.js'
 
 L.Icon.Default.mergeOptions({
@@ -167,8 +168,13 @@ export default function TaskFeedPage() {
 
       {viewMode === 'map' && tasks.length > 0 && (
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <MapContainer center={JKUAT_CENTER} zoom={15} className="h-[560px] w-full">
+          <MapContainer center={JKUAT_CENTER} zoom={12} className="h-[560px] w-full">
             <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            <Circle
+              center={JKUAT_GEOFENCE_CENTER}
+              radius={JKUAT_SERVICE_RADIUS_METERS}
+              pathOptions={{ color: '#2563eb', fillColor: '#60a5fa', fillOpacity: 0.08, weight: 2 }}
+            />
             {tasks.map((task) => (
               <Marker key={task.id} position={getTaskPosition(task)}>
                 <Popup>

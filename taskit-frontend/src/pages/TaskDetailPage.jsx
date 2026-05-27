@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Loader2, MapPin, MessageCircle, Send, ShieldCheck, Smartphone, Star, UserRound, X } from 'lucide-react'
-import { MapContainer, Marker, TileLayer } from 'react-leaflet'
+import { Circle, MapContainer, Marker, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -18,6 +18,7 @@ import { useAuthStore } from '../store/authStore.js'
 import { getApiErrorMessage } from '../utils/apiError.js'
 import { getTaskGenderPreferenceLabel, taskerMatchesPreference, USER_GENDER_LABELS } from '../constants/genderPreference.js'
 import { getTaskPosition } from '../constants/landmarks.js'
+import { getCurrentPosition, getGeofenceStatus, JKUAT_GEOFENCE_CENTER, JKUAT_SERVICE_RADIUS_METERS } from '../constants/geofence.js'
 import { getAvailabilityClass, getAvailabilityLabel } from '../constants/availability.js'
 import SOSButton from '../components/SOSButton.jsx'
 import LocationShareButton from '../components/LocationShareButton.jsx'
@@ -81,7 +82,10 @@ export default function TaskDetailPage() {
     enabled: canSeeBids,
   })
 
-  const bids = bidsQuery.data ?? task?.bids ?? []
+  const bids = useMemo(
+    () => bidsQuery.data ?? task?.bids ?? [],
+    [bidsQuery.data, task?.bids],
+  )
   const myBid = useMemo(
     () => bids.find((bid) => bid.tasker_id === user?.id),
     [bids, user?.id],
@@ -98,21 +102,36 @@ export default function TaskDetailPage() {
       && task?.payment_status === 'PENDING_PAYMENT',
   )
 
+  const invalidateTask = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['task', taskId] })
+    queryClient.invalidateQueries({ queryKey: ['task-bids', taskId] })
+  }, [queryClient, taskId])
+
+  useEffect(() => {
+    if (!paymentPollingUntil) return undefined
+
+    const timeout = window.setTimeout(
+      () => setPaymentPollingUntil(0),
+      Math.max(paymentPollingUntil - Date.now(), 0),
+    )
+    return () => window.clearTimeout(timeout)
+  }, [paymentPollingUntil])
+
   const paymentStatusQuery = useQuery({
     queryKey: ['payment-status', taskId],
     queryFn: () => getPaymentStatus(taskId),
-    enabled: Boolean(shouldAutoPollPayment || (paymentPollingUntil && Date.now() < paymentPollingUntil)),
+    enabled: Boolean(shouldAutoPollPayment || paymentPollingUntil),
     refetchInterval: () => (shouldAutoPollPayment || Date.now() < paymentPollingUntil ? 7000 : false),
   })
 
   useEffect(() => {
     if (!paymentStatusQuery.data) return
     if (['ESCROWED', 'RELEASED'].includes(paymentStatusQuery.data.status)) {
-      setPaymentPollingUntil(0)
+      window.queueMicrotask(() => setPaymentPollingUntil(0))
       toast.success('Escrow funded. The tasker has been notified.')
       invalidateTask()
     }
-  }, [paymentStatusQuery.data])
+  }, [invalidateTask, paymentStatusQuery.data])
 
   const checkPaymentMutation = useMutation({
     mutationFn: () => getPaymentStatus(taskId),
@@ -136,13 +155,24 @@ export default function TaskDetailPage() {
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not confirm escrow funding.')),
   })
 
-  const invalidateTask = () => {
-    queryClient.invalidateQueries({ queryKey: ['task', taskId] })
-    queryClient.invalidateQueries({ queryKey: ['task-bids', taskId] })
-  }
-
   const bidMutation = useMutation({
-    mutationFn: () => placeBid(taskId, bidForm),
+    mutationFn: async () => {
+      try {
+        const position = await getCurrentPosition()
+        const status = getGeofenceStatus(position.latitude, position.longitude)
+        if (status.level === 'blocked') throw new Error(status.message)
+        if (status.level === 'warning') toast(status.message)
+        return placeBid(taskId, {
+          ...bidForm,
+          actor_latitude: Number(position.latitude).toFixed(6),
+          actor_longitude: Number(position.longitude).toFixed(6),
+        })
+      } catch (locationError) {
+        if (locationError.message?.includes('TaskiT blocks')) throw locationError
+        toast('Could not confirm GPS. You can continue, but TaskiT may review unusual activity.')
+        return placeBid(taskId, bidForm)
+      }
+    },
     onSuccess: () => {
       toast.success('Bid placed')
       setBidForm({ amount: '', message: '' })
@@ -163,11 +193,27 @@ export default function TaskDetailPage() {
   })
 
   const acceptMutation = useMutation({
-    mutationFn: (bidId) => acceptBid(taskId, bidId),
+    mutationFn: async (bidId) => {
+      try {
+        const position = await getCurrentPosition()
+        const status = getGeofenceStatus(position.latitude, position.longitude)
+        if (status.level === 'blocked') throw new Error(status.message)
+        if (status.level === 'warning') toast(status.message)
+        return acceptBid(taskId, bidId, {
+          actor_latitude: Number(position.latitude).toFixed(6),
+          actor_longitude: Number(position.longitude).toFixed(6),
+        })
+      } catch (locationError) {
+        if (locationError.message?.includes('TaskiT blocks')) throw locationError
+        toast('Could not confirm GPS. You can continue, but TaskiT may review unusual activity.')
+        return acceptBid(taskId, bidId)
+      }
+    },
     onSuccess: () => {
       toast.success('Bid accepted')
       invalidateTask()
     },
+    onError: (mutationError) => setError(getApiErrorMessage(mutationError, mutationError.message || 'Could not accept bid.')),
   })
 
   const rejectMutation = useMutation({
@@ -279,6 +325,11 @@ export default function TaskDetailPage() {
           <div className="mt-5 overflow-hidden rounded-lg border border-slate-200">
             <MapContainer center={taskPosition} zoom={16} className="h-72 w-full" scrollWheelZoom={false}>
               <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <Circle
+                center={JKUAT_GEOFENCE_CENTER}
+                radius={JKUAT_SERVICE_RADIUS_METERS}
+                pathOptions={{ color: '#2563eb', fillColor: '#60a5fa', fillOpacity: 0.08, weight: 2 }}
+              />
               <Marker position={taskPosition} />
             </MapContainer>
           </div>

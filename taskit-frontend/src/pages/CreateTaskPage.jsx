@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Camera, Check, Crosshair, Loader2, MapPin, UploadCloud } from 'lucide-react'
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { Circle, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -13,6 +13,7 @@ import { createTask, getCategories } from '../api/tasks.js'
 import { getLandmarkPosition, JKUAT_CENTER, LANDMARKS } from '../constants/landmarks.js'
 import { CATEGORY_BUDGET_TIPS } from '../constants/taskCategories.js'
 import { getTaskGenderPreferenceLabel } from '../constants/genderPreference.js'
+import { getCurrentPosition, getGeofenceStatus, JKUAT_GEOFENCE_CENTER, JKUAT_SERVICE_RADIUS_METERS } from '../constants/geofence.js'
 import { getApiErrorMessage } from '../utils/apiError.js'
 
 L.Icon.Default.mergeOptions({
@@ -74,6 +75,7 @@ export default function CreateTaskPage() {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState(initialForm)
   const [error, setError] = useState('')
+  const [currentLocation, setCurrentLocation] = useState(null)
 
   const categoriesQuery = useQuery({
     queryKey: ['task-categories'],
@@ -83,6 +85,10 @@ export default function CreateTaskPage() {
   const selectedCategory = useMemo(
     () => (categoriesQuery.data ?? []).find((category) => String(category.id) === String(form.category)),
     [categoriesQuery.data, form.category],
+  )
+  const pinGeofenceStatus = useMemo(
+    () => getGeofenceStatus(form.location_latitude, form.location_longitude),
+    [form.location_latitude, form.location_longitude],
   )
 
   const createMutation = useMutation({
@@ -124,14 +130,13 @@ export default function CreateTaskPage() {
       return
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        updatePin(position.coords.latitude, position.coords.longitude)
+    getCurrentPosition()
+      .then((position) => {
+        setCurrentLocation(position)
+        updatePin(position.latitude, position.longitude)
         toast.success('Location pin moved to your current location')
-      },
-      () => setError('Could not access your current location. You can drag the pin manually.'),
-      { enableHighAccuracy: true, timeout: 10000 },
-    )
+      })
+      .catch(() => setError('Could not access your current location. You can drag the pin manually.'))
   }
 
   const validateStep = () => {
@@ -145,6 +150,10 @@ export default function CreateTaskPage() {
     if (step === 2) {
       if (!form.location_landmark) {
         setError('Choose a JKUAT location landmark.')
+        return false
+      }
+      if (pinGeofenceStatus.level === 'blocked') {
+        setError(pinGeofenceStatus.message)
         return false
       }
       if (form.schedule_type === 'SCHEDULED') {
@@ -181,14 +190,34 @@ export default function CreateTaskPage() {
     if (validateStep()) setStep((current) => Math.min(3, current + 1))
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     if (!validateStep()) return
+
+    let actorLocation = currentLocation
+    try {
+      actorLocation = await getCurrentPosition()
+      setCurrentLocation(actorLocation)
+      const actorStatus = getGeofenceStatus(actorLocation.latitude, actorLocation.longitude)
+      if (actorStatus.level === 'blocked') {
+        setError(actorStatus.message)
+        return
+      }
+      if (actorStatus.level === 'warning') {
+        toast(actorStatus.message)
+      }
+    } catch {
+      toast('Could not confirm GPS. You can continue, but TaskiT may review unusual activity.')
+    }
 
     const payload = new FormData()
     Object.entries(form).forEach(([key, value]) => {
       if (value !== '' && value !== null) payload.append(key, value)
     })
+    if (actorLocation) {
+      payload.append('actor_latitude', Number(actorLocation.latitude).toFixed(6))
+      payload.append('actor_longitude', Number(actorLocation.longitude).toFixed(6))
+    }
     createMutation.mutate(payload)
   }
 
@@ -287,11 +316,16 @@ export default function CreateTaskPage() {
                         ? getLandmarkPosition(form.location_landmark)
                         : JKUAT_CENTER
                   }
-                  zoom={16}
+                  zoom={12}
                   className="h-72 w-full"
                   scrollWheelZoom
                 >
                   <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  <Circle
+                    center={JKUAT_GEOFENCE_CENTER}
+                    radius={JKUAT_SERVICE_RADIUS_METERS}
+                    pathOptions={{ color: '#2563eb', fillColor: '#60a5fa', fillOpacity: 0.08, weight: 2 }}
+                  />
                   <RecenterMap
                     position={
                       form.location_latitude && form.location_longitude
@@ -313,8 +347,20 @@ export default function CreateTaskPage() {
                   />
                 </MapContainer>
               </div>
+              {pinGeofenceStatus.level !== 'unknown' && (
+                <div className={`mt-3 rounded-md border p-3 text-sm ${
+                  pinGeofenceStatus.level === 'blocked'
+                    ? 'border-red-200 bg-red-50 text-red-700'
+                    : pinGeofenceStatus.level === 'warning'
+                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                      : 'border-blue-100 bg-blue-50 text-blue-800'
+                }`}>
+                  <p className="font-semibold">{pinGeofenceStatus.title}</p>
+                  <p className="mt-1">{pinGeofenceStatus.message}</p>
+                </div>
+              )}
               <p className="mt-2 text-xs text-text-muted">
-                Drag the pin or click the map to adjust. Exact notes are still hidden from bidders until assignment.
+                Drag the pin or click the map to adjust. The blue circle shows TaskiT's 12km JKUAT service area.
                 {form.location_latitude && form.location_longitude ? ` Pin: ${form.location_latitude}, ${form.location_longitude}` : ''}
               </p>
             </div>

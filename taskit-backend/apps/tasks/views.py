@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Bid, Task, TaskCategory
+from .geo import validate_within_hard_geofence
 from .serializers import (
     BidCreateSerializer,
     BidSerializer,
@@ -205,6 +206,11 @@ class AcceptBidView(APIView):
             raise PermissionDenied("Only the task client can accept bids.")
         if task.status != Task.Status.OPEN:
             raise ValidationError("Only open tasks can have bids accepted.")
+        validate_within_hard_geofence(
+            request.data.get("actor_latitude"),
+            request.data.get("actor_longitude"),
+            "current_location",
+        )
 
         bid = get_object_or_404(
             Bid.objects.select_for_update().select_related("tasker"),
