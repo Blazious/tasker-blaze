@@ -54,3 +54,8 @@ export const getTaskBids = async (taskId) => {
   const response = await api.get(`/tasks/${taskId}/bids/`)
   return response.data
 }
+
+export const markTaskComplete = async (taskId) => {
+  const response = await api.post(`/tasks/${taskId}/mark-complete/`)
+  return response.data
+}

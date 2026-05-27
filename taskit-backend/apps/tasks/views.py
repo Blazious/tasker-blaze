@@ -8,6 +8,9 @@ from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnl
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.notifications.models import Notification
+from apps.notifications.utils import send_notification
+
 from .models import Bid, Task, TaskCategory
 from .geo import validate_within_hard_geofence
 from .serializers import (
@@ -247,3 +250,42 @@ class RejectBidView(APIView):
         bid.status = Bid.Status.REJECTED
         bid.save(update_fields=["status"])
         return Response(BidSerializer(bid).data)
+
+
+class MarkTaskCompleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, task_id):
+        task = get_object_or_404(
+            Task.objects.select_related("client", "assigned_tasker"),
+            pk=task_id,
+        )
+        if task.assigned_tasker_id != request.user.id:
+            raise PermissionDenied("Only the assigned tasker can mark work complete.")
+        if task.status != Task.Status.IN_PROGRESS:
+            raise ValidationError("Only in-progress tasks can be marked complete.")
+        if task.tasker_completed_at:
+            return Response(
+                {
+                    "message": "Completion is already waiting for client approval.",
+                    "tasker_completed_at": task.tasker_completed_at,
+                }
+            )
+
+        task.tasker_completed_at = timezone.now()
+        task.save(update_fields=["tasker_completed_at", "updated_at"])
+
+        send_notification(
+            task.client,
+            Notification.Type.TASK_COMPLETED,
+            "Task ready for approval",
+            f"{task.assigned_tasker.full_name} marked '{task.title}' as complete. Review the work and release escrow if everything looks good.",
+            related_task=task,
+        )
+
+        return Response(
+            {
+                "message": "Client has been notified to review and release payment.",
+                "tasker_completed_at": task.tasker_completed_at,
+            }
+        )

@@ -6,6 +6,7 @@ from .views import (
     MyAssignmentsView,
     MyBidsView,
     MyTasksView,
+    MarkTaskCompleteView,
     RejectBidView,
     TaskCategoryListView,
     TaskDetailView,
@@ -19,6 +20,7 @@ urlpatterns = [
     path("my-assignments/", MyAssignmentsView.as_view(), name="my-assignments"),
     path("my-bids/", MyBidsView.as_view(), name="my-bids"),
     path("<int:pk>/", TaskDetailView.as_view(), name="task-detail"),
+    path("<int:task_id>/mark-complete/", MarkTaskCompleteView.as_view(), name="mark-task-complete"),
     path("<int:task_id>/bids/", BidListCreateView.as_view(), name="task-bids"),
     path(
         "<int:task_id>/bids/<int:bid_id>/accept/",

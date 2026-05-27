@@ -9,7 +9,7 @@ import L from 'leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
-import { acceptBid, getTask, getTaskBids, placeBid, rejectBid } from '../api/tasks.js'
+import { acceptBid, getTask, getTaskBids, markTaskComplete, placeBid, rejectBid } from '../api/tasks.js'
 import { confirmEscrowFunded, disputePayment, getPaymentStatus, initiatePayment, releasePayment } from '../api/payments.js'
 import { activateTasker, getMe } from '../api/auth.js'
 import { submitReview } from '../api/reviews.js'
@@ -35,6 +35,151 @@ function StatusBadge({ status }) {
     <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-primary">
       {status}
     </span>
+  )
+}
+
+function EscrowWorkflowCard({
+  acceptedBid,
+  checkPaymentMutation,
+  confirmFundedMutation,
+  isClient,
+  isPaymentPending,
+  isTaskerAssigned,
+  markCompleteMutation,
+  onOpenPayment,
+  paymentMutation,
+  releaseMutation,
+  task,
+}) {
+  const fundsHeld = ['ESCROWED', 'RELEASED'].includes(task.payment_status) || ['IN_PROGRESS', 'COMPLETED'].includes(task.status)
+  const workStarted = ['IN_PROGRESS', 'COMPLETED'].includes(task.status)
+  const taskerMarkedComplete = Boolean(task.tasker_completed_at) || task.status === 'COMPLETED'
+  const paymentReleased = task.payment_status === 'RELEASED' || task.status === 'COMPLETED'
+  const steps = [
+    { label: 'Funds Held', complete: fundsHeld, active: task.status === 'ASSIGNED' },
+    { label: 'Work Started', complete: workStarted, active: fundsHeld && task.status === 'IN_PROGRESS' && !taskerMarkedComplete },
+    { label: 'Task Complete', complete: taskerMarkedComplete, active: task.status === 'IN_PROGRESS' && taskerMarkedComplete },
+    { label: 'Payment Released', complete: paymentReleased, active: task.status === 'COMPLETED' },
+  ]
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="grid gap-4 border-b border-slate-100 p-5 lg:grid-cols-[1fr_auto] lg:items-center">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Escrow workflow</p>
+          <h2 className="mt-1 text-xl font-bold text-primary">Payment and completion</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            Funds stay in escrow until the tasker marks the work complete and the client approves release.
+          </p>
+        </div>
+        {acceptedBid && (
+          <div className="rounded-md bg-emerald-50 px-4 py-3 text-left lg:text-right">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Escrow amount</p>
+            <p className="text-lg font-black text-primary">KES {acceptedBid.amount}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-0 p-5 sm:grid-cols-4">
+        {steps.map((step, index) => (
+          <div key={step.label} className="relative grid gap-2 pb-5 sm:pb-0">
+            {index < steps.length - 1 && (
+              <span className={`absolute left-5 top-5 h-full w-0.5 sm:left-[calc(50%+20px)] sm:top-5 sm:h-0.5 sm:w-[calc(100%-40px)] ${steps[index + 1].complete ? 'bg-primary' : 'bg-slate-200'}`} />
+            )}
+            <div className="relative z-10 flex items-center gap-3 sm:flex-col sm:text-center">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
+                step.complete
+                  ? 'border-primary bg-primary text-white'
+                  : step.active
+                    ? 'border-secondary bg-white text-secondary'
+                    : 'border-slate-200 bg-white text-text-muted'
+              }`}>
+                {step.complete ? <CheckCircle2 size={18} /> : index + 1}
+              </span>
+              <span className={`text-sm font-semibold ${step.complete || step.active ? 'text-text-dark' : 'text-text-muted'}`}>{step.label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-slate-100 p-5">
+        {task.status === 'ASSIGNED' && isClient && (
+          <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="font-semibold text-text-dark">{isPaymentPending ? 'Waiting for escrow sync' : 'Fund escrow to start work'}</p>
+              <p className="text-text-muted">
+                {isPaymentPending ? 'TaskiT is checking eConfirm automatically after the STK prompt.' : 'The tasker should only begin once funds are safely held.'}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {isPaymentPending ? (
+                <>
+                  <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-text-dark disabled:opacity-60">
+                    {checkPaymentMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+                    Check
+                  </button>
+                  <button type="button" onClick={onOpenPayment} disabled={paymentMutation.isPending} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-text-dark disabled:opacity-60">
+                    Retry STK
+                  </button>
+                  <button type="button" onClick={() => confirmFundedMutation.mutate()} disabled={confirmFundedMutation.isPending} className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
+                    I Already Paid
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={onOpenPayment} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-bold text-white">
+                  <Smartphone size={16} />
+                  Pay Now
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {task.status === 'IN_PROGRESS' && isTaskerAssigned && !task.tasker_completed_at && (
+          <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="font-semibold text-text-dark">Work in progress</p>
+              <p className="text-text-muted">When you finish, notify the client so they can inspect and release escrow.</p>
+            </div>
+            <button type="button" onClick={() => markCompleteMutation.mutate()} disabled={markCompleteMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
+              {markCompleteMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+              Mark Task Complete
+            </button>
+          </div>
+        )}
+
+        {task.status === 'IN_PROGRESS' && isTaskerAssigned && task.tasker_completed_at && (
+          <p className="rounded-md bg-blue-50 p-3 text-sm font-medium text-blue-800">
+            Completion sent to the client. Escrow will release after client approval.
+          </p>
+        )}
+
+        {task.status === 'IN_PROGRESS' && isClient && !task.tasker_completed_at && (
+          <p className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-800">
+            Funds are held. Wait for the tasker to mark the task complete before approving release.
+          </p>
+        )}
+
+        {task.status === 'IN_PROGRESS' && isClient && task.tasker_completed_at && (
+          <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="font-semibold text-text-dark">Tasker says the work is complete</p>
+              <p className="text-text-muted">Review the work, then approve release if everything is okay.</p>
+            </div>
+            <button type="button" onClick={() => releaseMutation.mutate()} disabled={releaseMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
+              {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+              Approve & Release
+            </button>
+          </div>
+        )}
+
+        {task.status === 'COMPLETED' && (
+          <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-primary">
+            Payment has been released. Reviews are now open for both sides.
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -75,6 +220,7 @@ export default function TaskDetailPage() {
   const matchesGenderPreference = taskerMatchesPreference(task?.preferred_tasker_gender, user?.gender)
   const canSeeBids = Boolean(task && (isClient || isTasker))
   const taskPosition = task ? getTaskPosition(task) : null
+  const isAssignedTasker = Boolean(task?.assigned_tasker_id === user?.id)
 
   const bidsQuery = useQuery({
     queryKey: ['task-bids', taskId],
@@ -244,6 +390,16 @@ export default function TaskDetailPage() {
       toast.success('Payment released')
       invalidateTask()
     },
+    onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not release payment.')),
+  })
+
+  const markCompleteMutation = useMutation({
+    mutationFn: () => markTaskComplete(taskId),
+    onSuccess: (data) => {
+      toast.success(data.message || 'Client notified')
+      invalidateTask()
+    },
+    onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not mark task complete.')),
   })
 
   const reviewMutation = useMutation({
@@ -400,50 +556,23 @@ export default function TaskDetailPage() {
               </div>
             ))}
           </div>
-
-          {task.status === 'ASSIGNED' && acceptedBid && (
-            <div className="mt-5 overflow-hidden rounded-lg border border-emerald-200 bg-white shadow-sm">
-              <div className="flex flex-col gap-3 bg-gradient-to-br from-[#0b7f3a] via-[#13a052] to-[#8fd14f] p-4 text-white sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
-                    <Smartphone size={20} />
-                  </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-white/80">M-Pesa escrow</p>
-                    <p className="text-lg font-bold">KES {acceptedBid.amount}</p>
-                  </div>
-                </div>
-                {task.payment_status === 'PENDING_PAYMENT' ? (
-                  <span className="w-fit rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">Waiting for escrow sync</span>
-                ) : (
-                  <button type="button" onClick={() => setIsPaymentModalOpen(true)} className="w-fit rounded-md bg-white px-4 py-2 text-sm font-bold text-[#0b7f3a] shadow-sm">
-                    Pay Now
-                  </button>
-                )}
-              </div>
-              {task.payment_status === 'PENDING_PAYMENT' && (
-                <div className="grid gap-3 p-4 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-                  <div>
-                    <p className="font-semibold text-text-dark">Checking eConfirm automatically</p>
-                    <p className="text-text-muted">If you paid from STK, TaskiT polls eConfirm every few seconds while localhost callbacks are unavailable.</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-text-dark disabled:opacity-60">
-                      {checkPaymentMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-                      Check
-                    </button>
-                    <button type="button" onClick={() => setIsPaymentModalOpen(true)} disabled={paymentMutation.isPending} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-text-dark disabled:opacity-60">
-                      Retry STK
-                    </button>
-                    <button type="button" onClick={() => confirmFundedMutation.mutate()} disabled={confirmFundedMutation.isPending} className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
-                      I Already Paid
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
+      )}
+
+      {acceptedBid && ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(task.status) && (
+        <EscrowWorkflowCard
+          acceptedBid={acceptedBid}
+          checkPaymentMutation={checkPaymentMutation}
+          confirmFundedMutation={confirmFundedMutation}
+          isClient={isClient}
+          isPaymentPending={task.payment_status === 'PENDING_PAYMENT'}
+          isTaskerAssigned={isAssignedTasker}
+          markCompleteMutation={markCompleteMutation}
+          onOpenPayment={() => setIsPaymentModalOpen(true)}
+          paymentMutation={paymentMutation}
+          releaseMutation={releaseMutation}
+          task={task}
+        />
       )}
 
       {isTasker && (
@@ -497,13 +626,6 @@ export default function TaskDetailPage() {
             Activate Tasker Mode
           </button>
         </div>
-      )}
-
-      {task.status === 'IN_PROGRESS' && isClient && (
-        <button type="button" onClick={() => releaseMutation.mutate()} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white">
-          <CheckCircle2 size={18} />
-          Mark as Complete & Release Payment
-        </button>
       )}
 
       {task.status === 'COMPLETED' && (isClient || task.assigned_tasker_id === user?.id) && !reviewSubmitted && (
