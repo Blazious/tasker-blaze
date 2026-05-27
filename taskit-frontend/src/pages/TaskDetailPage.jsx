@@ -135,6 +135,19 @@ function EscrowWorkflowCard({
           </div>
         )}
 
+        {task.status === 'ASSIGNED' && isTaskerAssigned && (
+          <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="font-semibold text-text-dark">Waiting for escrow funding</p>
+              <p className="text-text-muted">Start work only after funds are held. If the client has paid, refresh escrow status.</p>
+            </div>
+            <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md border border-primary px-4 py-2 font-semibold text-primary disabled:opacity-70">
+              {checkPaymentMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+              Check Escrow
+            </button>
+          </div>
+        )}
+
         {task.status === 'IN_PROGRESS' && isTaskerAssigned && !task.tasker_completed_at && (
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
@@ -559,7 +572,7 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {acceptedBid && ['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(task.status) && (
+      {['ASSIGNED', 'IN_PROGRESS', 'COMPLETED'].includes(task.status) && (acceptedBid || isClient || isAssignedTasker) && (
         <EscrowWorkflowCard
           acceptedBid={acceptedBid}
           checkPaymentMutation={checkPaymentMutation}
