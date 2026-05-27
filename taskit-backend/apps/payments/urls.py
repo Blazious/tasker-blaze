@@ -16,6 +16,7 @@ from .views import (
     PesapalIPNCallbackView,
     PayPlatformInvoiceView,
     ReleasePaymentView,
+    TestPlatformInvoiceView,
 )
 
 urlpatterns = [
@@ -30,6 +31,7 @@ urlpatterns = [
     path("my-earnings/", MyEarningsView.as_view(), name="my-earnings"),
     path("my-spending/", MySpendingView.as_view(), name="my-spending"),
     path("platform-billing/", PlatformBillingSummaryView.as_view(), name="platform-billing"),
+    path("platform-billing/test-invoice/", TestPlatformInvoiceView.as_view(), name="test-platform-invoice"),
     path("platform-invoices/<int:invoice_id>/pay/", PayPlatformInvoiceView.as_view(), name="pay-platform-invoice"),
     path("platform-invoices/<int:invoice_id>/status/", PlatformInvoicePaymentStatusView.as_view(), name="platform-invoice-payment-status"),
     path("intasend/invoice-callback/", IntaSendInvoiceCallbackView.as_view(), name="intasend-invoice-callback"),

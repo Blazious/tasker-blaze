@@ -194,6 +194,12 @@ INTASEND_TEST_MODE = config("INTASEND_TEST_MODE", default="True").lower() in {
     "on",
 }
 INTASEND_WEBHOOK_CHALLENGE = config("INTASEND_WEBHOOK_CHALLENGE", default="")
+ENABLE_TEST_BILLING_TOOLS = config("ENABLE_TEST_BILLING_TOOLS", default="False").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 GEMINI_API_KEY = config("GEMINI_API_KEY", default="")
 GEMINI_MODEL = config("GEMINI_MODEL", default="gemini-2.5-flash")

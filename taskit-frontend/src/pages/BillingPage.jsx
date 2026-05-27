@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, CreditCard, Loader2, ReceiptText, ShieldAlert, Smartphone } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { generatePlatformInvoice, getPlatformBilling, getPlatformInvoicePaymentStatus, payPlatformInvoice } from '../api/payments.js'
+import { createTestPlatformInvoice, generatePlatformInvoice, getPlatformBilling, getPlatformInvoicePaymentStatus, payPlatformInvoice } from '../api/payments.js'
 import { useAuthStore } from '../store/authStore.js'
 
 export default function BillingPage() {
@@ -31,6 +31,13 @@ export default function BillingPage() {
     onSuccess: (data) => {
       toast.success(data.invoice_status === 'PAID' ? 'Invoice paid.' : `Payment status: ${data.payment_status || 'Not started'}`)
       queryClient.invalidateQueries({ queryKey: ['platform-billing'] })
+    },
+  })
+  const testInvoiceMutation = useMutation({
+    mutationFn: () => createTestPlatformInvoice(70),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['platform-billing'], data)
+      toast.success('Test invoice created.')
     },
   })
 
@@ -90,15 +97,28 @@ export default function BillingPage() {
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 p-4">
             <h2 className="font-bold text-text-dark">Tracked tasks</h2>
-            <button
-              type="button"
-              onClick={() => invoiceMutation.mutate()}
-              disabled={invoiceMutation.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
-            >
-              {invoiceMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CalendarClock size={14} />}
-              Generate invoice
-            </button>
+            <div className="flex flex-wrap gap-2">
+              {billing?.test_billing_tools_enabled && (
+                <button
+                  type="button"
+                  onClick={() => testInvoiceMutation.mutate()}
+                  disabled={testInvoiceMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-md border border-primary px-3 py-2 text-xs font-bold text-primary disabled:opacity-60"
+                >
+                  {testInvoiceMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
+                  Test KES 70
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => invoiceMutation.mutate()}
+                disabled={invoiceMutation.isPending}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+              >
+                {invoiceMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <CalendarClock size={14} />}
+                Generate invoice
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[620px] text-left text-sm">

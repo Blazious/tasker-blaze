@@ -1,8 +1,11 @@
 import logging
+from datetime import timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -400,6 +403,34 @@ class PlatformBillingSummaryView(APIView):
         invoice = generate_invoice_for_month(request.user)
         summary = billing_summary(request.user)
         summary["generated_invoice_id"] = invoice.id if invoice else None
+        return Response(summary)
+
+
+class TestPlatformInvoiceView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not settings.ENABLE_TEST_BILLING_TOOLS:
+            raise PermissionDenied("Test billing tools are disabled.")
+
+        amount = Decimal(str(request.data.get("amount", "70.00")))
+        if amount <= 0 or amount > Decimal("70.00"):
+            raise ValidationError("Test invoice amount must be between KES 1 and KES 70.")
+
+        month = timezone.now().date().replace(day=1)
+        invoice, _ = PlatformInvoice.objects.update_or_create(
+            tasker=request.user,
+            billing_month=month,
+            defaults={
+                "amount": amount,
+                "status": PlatformInvoice.Status.PENDING,
+                "due_date": timezone.now() + timedelta(days=3),
+                "notes": "Manual test invoice for IntaSend billing",
+            },
+        )
+        summary = billing_summary(request.user)
+        summary["generated_invoice_id"] = invoice.id
+        summary["test_invoice_id"] = invoice.id
         return Response(summary)
 
 

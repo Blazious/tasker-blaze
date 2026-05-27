@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -125,6 +126,7 @@ def billing_summary(user):
         "trial_waived_task_volume": str(quantize_money(trial_waived)),
         "overdue_balance": str(quantize_money(overdue)),
         "can_bid": overdue <= 0,
+        "test_billing_tools_enabled": settings.ENABLE_TEST_BILLING_TOOLS,
         "tracked_tasks": [
             {
                 "id": usage.id,

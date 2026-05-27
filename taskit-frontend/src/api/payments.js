@@ -40,6 +40,11 @@ export const generatePlatformInvoice = async () => {
   return response.data
 }
 
+export const createTestPlatformInvoice = async (amount = 70) => {
+  const response = await api.post('/payments/platform-billing/test-invoice/', { amount })
+  return response.data
+}
+
 export const payPlatformInvoice = async (invoiceId, data = {}) => {
   const response = await api.post(`/payments/platform-invoices/${invoiceId}/pay/`, data)
   return response.data
