@@ -12,7 +12,7 @@ TaskiT is a JKUAT student marketplace for campus errands and services. Students 
 - Tasker mode with availability states: Available, Busy, and Offline.
 - Bidding, bid acceptance, assigned-task workflow, and task completion.
 - eConfirm escrow payments with M-Pesa STK push using phone numbers from user profiles.
-- Post-paid platform billing: 14-day trial, 10% tracked platform fee, monthly invoice view, and 3-day grace period.
+- Post-paid platform billing: 3-day trial, 10% tracked platform fee, monthly invoice view, and 3-day grace period.
 - Real-time chat with text, image attachments, voice notes, typing indicators, task context, and safety cautions.
 - Notifications for bids, accepted bids, payment, completion, reviews, disputes, and messages.
 - Lightweight KYC in profile using Mindee OCR fields and face-match placeholders.
@@ -157,7 +157,7 @@ ECONFIRM_CALLBACK_URL=https://your-ngrok-url/api/v1/payments/econfirm-callback/
 
 TaskiT uses a post-paid platform fee model:
 
-- 14-day free trial from user signup.
+- 3-day free trial from user signup.
 - During trial, completed task volume is tracked but the platform fee is waived.
 - After trial, TaskiT tracks a 10% platform fee on released paid tasks.
 - Billing is visible at `/billing`.

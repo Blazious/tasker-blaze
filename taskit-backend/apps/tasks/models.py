@@ -92,6 +92,8 @@ class Task(models.Model):
     assigned_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     tasker_completed_at = models.DateTimeField(null=True, blank=True)
+    client_hidden_at = models.DateTimeField(null=True, blank=True)
+    tasker_hidden_at = models.DateTimeField(null=True, blank=True)
     schedule_type = models.CharField(
         max_length=20,
         choices=ScheduleType.choices,

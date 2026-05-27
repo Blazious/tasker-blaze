@@ -142,6 +142,7 @@ class MyTasksView(generics.ListAPIView):
     def get_queryset(self):
         return (
             Task.objects.filter(client=self.request.user)
+            .filter(client_hidden_at__isnull=True)
             .select_related("client", "category", "assigned_tasker")
             .prefetch_related("bids__tasker")
         )
@@ -155,6 +156,7 @@ class MyAssignmentsView(generics.ListAPIView):
     def get_queryset(self):
         return (
             Task.objects.filter(assigned_tasker=self.request.user)
+            .filter(tasker_hidden_at__isnull=True)
             .select_related("client", "category", "assigned_tasker")
             .prefetch_related("bids__tasker")
         )
@@ -289,3 +291,24 @@ class MarkTaskCompleteView(APIView):
                 "tasker_completed_at": task.tasker_completed_at,
             }
         )
+
+
+class ForgetTaskView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, task_id):
+        task = get_object_or_404(Task, pk=task_id)
+        now = timezone.now()
+        update_fields = ["updated_at"]
+
+        if task.client_id == request.user.id:
+            task.client_hidden_at = now
+            update_fields.append("client_hidden_at")
+        elif task.assigned_tasker_id == request.user.id:
+            task.tasker_hidden_at = now
+            update_fields.append("tasker_hidden_at")
+        else:
+            raise PermissionDenied("You can only forget your own posted or assigned tasks.")
+
+        task.save(update_fields=update_fields)
+        return Response({"message": "Task hidden from your list."})

@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from .models import PlatformFeeUsage, PlatformInvoice, Transaction, quantize_money
 
-TRIAL_DAYS = 14
+TRIAL_DAYS = 3
 GRACE_PERIOD_DAYS = 3
 
 
@@ -43,7 +43,17 @@ def track_platform_fee(transaction):
     return usage
 
 
+def reconcile_platform_fee_usage(user):
+    released_transactions = (
+        Transaction.objects.filter(tasker=user, status=Transaction.Status.RELEASED)
+        .select_related("task", "tasker")
+    )
+    for transaction in released_transactions:
+        track_platform_fee(transaction)
+
+
 def generate_invoice_for_month(user, billing_month=None):
+    reconcile_platform_fee_usage(user)
     billing_month = billing_month or first_day_of_month(timezone.now())
     usages = PlatformFeeUsage.objects.filter(
         tasker=user,
@@ -88,6 +98,7 @@ def has_overdue_invoice(user):
 
 
 def billing_summary(user):
+    reconcile_platform_fee_usage(user)
     now = timezone.now()
     month = first_day_of_month(now)
     current_usages = PlatformFeeUsage.objects.filter(tasker=user, billing_month=month)
