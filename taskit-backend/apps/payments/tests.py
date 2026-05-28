@@ -165,6 +165,25 @@ class PaymentTestCase(TestCase):
         with self.assertRaises(ValueError):
             release_funds(transaction)
 
+    @override_settings(ECONFIRM_MOCK=True)
+    @patch("apps.payments.escrow.send_notification")
+    def test_release_endpoint_syncs_funded_econfirm_before_release(self, _mock_notify):
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["tasker_completed_at", "updated_at"])
+        transaction = self.create_transaction()
+        transaction.econfirm_transaction_id = "mock-econfirm-release"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.post(f"/api/v1/payments/release/{self.task.id}/")
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(transaction.status, Transaction.Status.RELEASED)
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
     def test_ipn_callback_returns_200_for_bad_payload(self):
         api_client = APIClient()
 

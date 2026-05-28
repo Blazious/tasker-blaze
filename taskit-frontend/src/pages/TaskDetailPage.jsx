@@ -56,7 +56,7 @@ function EscrowWorkflowCard({
   const taskerMarkedComplete = Boolean(task.tasker_completed_at) || task.status === 'COMPLETED'
   const paymentReleased = task.payment_status === 'RELEASED' || task.status === 'COMPLETED'
   const canMarkComplete = isTaskerAssigned && fundsHeld && !taskerMarkedComplete && !paymentReleased
-  const canApproveRelease = isClient && fundsHeld && taskerMarkedComplete && !paymentReleased
+  const canApproveRelease = isClient && taskerMarkedComplete && !paymentReleased
   const steps = [
     { label: 'Funds Held', complete: fundsHeld, active: task.status === 'ASSIGNED' },
     { label: 'Work Started', complete: workStarted, active: fundsHeld && !taskerMarkedComplete },
@@ -185,7 +185,7 @@ function EscrowWorkflowCard({
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
               <p className="font-semibold text-text-dark">Tasker says the work is complete</p>
-              <p className="text-text-muted">Review the work, then approve release if everything is okay.</p>
+              <p className="text-text-muted">Review the work, then approve release if everything is okay. Rating opens immediately after release.</p>
             </div>
             <button type="button" onClick={() => releaseMutation.mutate()} disabled={releaseMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
               {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
@@ -408,7 +408,7 @@ export default function TaskDetailPage() {
   const releaseMutation = useMutation({
     mutationFn: () => releasePayment(taskId),
     onSuccess: () => {
-      toast.success('Payment released')
+      toast.success('Payment released. You can now leave a review.')
       invalidateTask()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not release payment.')),
@@ -651,16 +651,28 @@ export default function TaskDetailPage() {
 
       {task.status === 'COMPLETED' && (isClient || task.assigned_tasker_id === user?.id) && !reviewSubmitted && (
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-text-dark">Leave a Review</h2>
+          <h2 className="text-xl font-semibold text-text-dark">{isClient ? 'Rate the Tasker' : 'Rate the Client'}</h2>
+          <p className="mt-1 text-sm text-text-muted">
+            {isClient ? 'Share how the tasker handled the job.' : 'Share how the client handled the task.'}
+          </p>
           <div className="mt-4 flex gap-1">
             {[1, 2, 3, 4, 5].map((rating) => (
-              <button key={rating} type="button" onClick={() => setReviewForm((current) => ({ ...current, rating }))}>
+              <button key={rating} type="button" onClick={() => setReviewForm((current) => ({ ...current, rating }))} aria-label={`${rating} star rating`}>
                 <Star size={24} className={rating <= reviewForm.rating ? 'fill-secondary text-secondary' : 'text-slate-300'} />
               </button>
             ))}
           </div>
-          <textarea value={reviewForm.comment} onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))} maxLength={500} rows={4} className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2" />
+          <textarea value={reviewForm.comment} onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))} maxLength={500} rows={4} placeholder="Write a short review" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2" />
           <button type="button" onClick={() => reviewMutation.mutate()} className="mt-3 rounded-md bg-primary px-4 py-2 font-semibold text-white">Submit Review</button>
+        </div>
+      )}
+
+      {task.status === 'IN_PROGRESS' && isClient && task.tasker_completed_at && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 shadow-sm">
+          <h2 className="text-xl font-semibold text-amber-950">Rate the Tasker</h2>
+          <p className="mt-2 text-sm text-amber-800">
+            Approve and release escrow first, then the rating form will open here.
+          </p>
         </div>
       )}
 

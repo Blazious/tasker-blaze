@@ -14,11 +14,11 @@ from rest_framework.views import APIView
 
 from apps.tasks.models import Bid, Task
 
-from .billing import billing_summary, generate_invoice_for_month
+from .billing import billing_summary, generate_invoice_for_month, track_platform_fee
 from .econfirm import EconfirmClient
 from .escrow import flag_dispute, hold_funds, release_funds
 from .intasend import IntaSendClient, mark_invoice_payment_failed, mark_invoice_payment_paid
-from .models import DisputeNote, PlatformInvoice, PlatformInvoicePayment, Transaction
+from .models import DisputeNote, EscrowLedger, PlatformInvoice, PlatformInvoicePayment, Transaction
 from .serializers import DisputeCreateSerializer, TransactionSerializer
 
 logger = logging.getLogger(__name__)
@@ -295,6 +295,48 @@ class ReleasePaymentView(APIView):
         )
         if transaction.client_id != request.user.id:
             raise PermissionDenied("Only the task client can release payment.")
+        if not transaction.task.tasker_completed_at:
+            raise ValidationError("The tasker must mark the task complete before funds can be released.")
+
+        if transaction.status == Transaction.Status.PENDING_PAYMENT and transaction.econfirm_transaction_id:
+            external_status = EconfirmClient().check_transaction_status(
+                transaction.econfirm_transaction_id
+            )
+            external_data = external_status.get("data", external_status) if external_status else {}
+            external_state = str(external_data.get("status", "")).lower()
+            external_event = str(external_data.get("event", external_status.get("event", "") if external_status else "")).lower()
+            if external_state in {"funded", "in_progress", "held", "escrowed"} or external_event in {
+                "payment.success",
+                "escrow.funded",
+                "funds.held",
+            }:
+                hold_funds(transaction)
+                transaction.refresh_from_db()
+            elif external_state in {"complete", "completed", "released"} or external_event in {
+                "funds.released",
+                "escrow.released",
+            }:
+                now = timezone.now()
+                transaction.status = Transaction.Status.RELEASED
+                transaction.released_at = now
+                transaction.save(update_fields=["status", "released_at", "updated_at"])
+                task = transaction.task
+                task.status = Task.Status.COMPLETED
+                task.completed_at = now
+                task.save(update_fields=["status", "completed_at", "updated_at"])
+                EscrowLedger.objects.get_or_create(
+                    transaction=transaction,
+                    action=EscrowLedger.Action.RELEASE,
+                    defaults={
+                        "amount": transaction.tasker_payout,
+                        "note": "Tasker payout synced from eConfirm",
+                    },
+                )
+                track_platform_fee(transaction)
+                return Response({"message": "Payment release synced. Reviews are now open."})
+
+        if transaction.status != Transaction.Status.ESCROWED:
+            raise ValidationError("Escrow is not funded yet, so funds cannot be released.")
 
         release_funds(transaction)
         return Response({"message": "Payment released. Great job!"})
