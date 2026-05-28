@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Archive, Loader2 } from 'lucide-react'
 import { forgetTask, getMyAssignments, getMyTasks } from '../api/tasks.js'
@@ -15,21 +15,37 @@ const statusStyles = {
 }
 
 function TaskList({ tasks, onForget, forgettingId }) {
+  const navigate = useNavigate()
   if (!tasks.length) return <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-text-muted">No tasks here yet.</p>
   return (
     <div className="grid gap-3">
       {tasks.map((task) => (
-        <div key={task.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm hover:border-primary/40">
+        <div
+          key={task.id}
+          role="link"
+          tabIndex={0}
+          onClick={() => navigate(`/tasks/${task.id}`)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              navigate(`/tasks/${task.id}`)
+            }
+          }}
+          className="cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-primary/30"
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <Link to={`/tasks/${task.id}`} className="font-semibold text-text-dark hover:text-primary">{task.title}</Link>
+              <p className="font-semibold text-text-dark">{task.title}</p>
               <p className="text-sm text-text-muted">{task.location_landmark} - KES {task.budget_min} to {task.budget_max}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${statusStyles[task.status] ?? 'bg-slate-100 text-slate-700'}`}>{task.status}</span>
               <button
                 type="button"
-                onClick={() => onForget(task.id)}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onForget(task.id)
+                }}
                 disabled={forgettingId === task.id}
                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-semibold text-text-muted hover:border-primary hover:text-primary disabled:opacity-60"
               >

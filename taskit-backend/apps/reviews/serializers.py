@@ -59,6 +59,7 @@ class PublicProfileSerializer(serializers.Serializer):
     completed_tasks_count = serializers.IntegerField()
     badges = serializers.SerializerMethodField()
     recent_reviews = serializers.SerializerMethodField()
+    completed_task_history = serializers.SerializerMethodField()
     public_report_count = serializers.SerializerMethodField()
     public_reports = serializers.SerializerMethodField()
 
@@ -75,6 +76,22 @@ class PublicProfileSerializer(serializers.Serializer):
             "reviewee",
         )[:5]
         return ReviewSerializer(reviews, many=True).data
+
+    def get_completed_task_history(self, obj):
+        tasks = obj.assigned_tasks.filter(status="COMPLETED").select_related(
+            "category",
+            "client",
+        )[:5]
+        return [
+            {
+                "id": task.id,
+                "title": task.title,
+                "category": task.category.name,
+                "client_name": task.client.full_name,
+                "completed_at": task.completed_at,
+            }
+            for task in tasks
+        ]
 
     def get_public_report_count(self, obj):
         return UserReport.objects.filter(reported_user=obj, is_public=True).count()

@@ -698,9 +698,28 @@ export default function TaskDetailPage() {
                     <p className="text-sm text-text-muted">{taskerProfileQuery.data?.completed_tasks_count} completed tasks</p>
                   </div>
                 </div>
+                <p className="text-sm text-text-muted">
+                  {taskerProfileQuery.data?.department || 'Department not set'}
+                  {taskerProfileQuery.data?.year_of_study ? ` - Year ${taskerProfileQuery.data.year_of_study}` : ''}
+                </p>
+                <p className="text-sm text-text-muted">{taskerProfileQuery.data?.bio || 'No bio yet.'}</p>
                 <p className="font-semibold">Rating: {taskerProfileQuery.data?.average_rating} / 5</p>
                 <div className="flex flex-wrap gap-2">
                   {taskerProfileQuery.data?.badges?.map((badge) => <span key={badge} className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-primary">{badge}</span>)}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-text-dark">Completed work</h3>
+                  <div className="mt-2 grid gap-2">
+                    {(taskerProfileQuery.data?.completed_task_history ?? []).slice(0, 3).map((historyItem) => (
+                      <Link key={historyItem.id} to={`/tasks/${historyItem.id}`} className="rounded-md bg-slate-50 p-3 text-sm text-text-muted hover:bg-emerald-50">
+                        <span className="block font-semibold text-text-dark">{historyItem.title}</span>
+                        <span>{historyItem.category} task for {historyItem.client_name}</span>
+                      </Link>
+                    ))}
+                    {(taskerProfileQuery.data?.completed_task_history ?? []).length === 0 && (
+                      <p className="rounded-md bg-slate-50 p-3 text-sm text-text-muted">No completed work yet.</p>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <h3 className="font-semibold text-text-dark">Recent reviews</h3>

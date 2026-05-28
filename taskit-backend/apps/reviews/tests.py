@@ -130,3 +130,4 @@ class ReviewTestCase(TestCase):
         self.assertEqual(response.data["completed_tasks_count"], 1)
         self.assertEqual(response.data["badges"], ["First Task"])
         self.assertEqual(response.data["recent_reviews"][0]["comment"], "Excellent work")
+        self.assertEqual(response.data["completed_task_history"][0]["title"], self.task.title)

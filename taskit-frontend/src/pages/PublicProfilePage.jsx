@@ -152,6 +152,22 @@ export default function PublicProfilePage() {
       </div>
 
       <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-xl font-semibold text-text-dark">Completed Work</h2>
+        <div className="mt-4 grid gap-3">
+          {(profile.completed_task_history ?? []).length === 0 && <p className="text-text-muted">No completed task history yet.</p>}
+          {(profile.completed_task_history ?? []).map((task) => (
+            <Link key={task.id} to={`/tasks/${task.id}`} className="rounded-lg border border-slate-200 p-4 transition hover:border-primary/40 hover:shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-text-dark">{task.title}</p>
+                {task.completed_at && <span className="text-xs text-text-muted">{new Date(task.completed_at).toLocaleDateString()}</span>}
+              </div>
+              <p className="mt-1 text-sm text-text-muted">{task.category} task for {task.client_name}</p>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-text-dark">Recent Reviews</h2>
         <div className="mt-4 grid gap-3">
           {profile.recent_reviews.length === 0 && <p className="text-text-muted">No reviews yet.</p>}
