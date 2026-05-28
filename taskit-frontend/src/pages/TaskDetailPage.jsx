@@ -55,10 +55,12 @@ function EscrowWorkflowCard({
   const workStarted = ['IN_PROGRESS', 'COMPLETED'].includes(task.status)
   const taskerMarkedComplete = Boolean(task.tasker_completed_at) || task.status === 'COMPLETED'
   const paymentReleased = task.payment_status === 'RELEASED' || task.status === 'COMPLETED'
+  const canMarkComplete = isTaskerAssigned && fundsHeld && !taskerMarkedComplete && !paymentReleased
+  const canApproveRelease = isClient && fundsHeld && taskerMarkedComplete && !paymentReleased
   const steps = [
     { label: 'Funds Held', complete: fundsHeld, active: task.status === 'ASSIGNED' },
-    { label: 'Work Started', complete: workStarted, active: fundsHeld && task.status === 'IN_PROGRESS' && !taskerMarkedComplete },
-    { label: 'Task Complete', complete: taskerMarkedComplete, active: task.status === 'IN_PROGRESS' && taskerMarkedComplete },
+    { label: 'Work Started', complete: workStarted, active: fundsHeld && !taskerMarkedComplete },
+    { label: 'Task Complete', complete: taskerMarkedComplete, active: fundsHeld && taskerMarkedComplete },
     { label: 'Payment Released', complete: paymentReleased, active: task.status === 'COMPLETED' },
   ]
 
@@ -135,7 +137,7 @@ function EscrowWorkflowCard({
           </div>
         )}
 
-        {task.status === 'ASSIGNED' && isTaskerAssigned && (
+        {task.status === 'ASSIGNED' && isTaskerAssigned && !fundsHeld && (
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
               <p className="font-semibold text-text-dark">Waiting for escrow funding</p>
@@ -148,10 +150,10 @@ function EscrowWorkflowCard({
           </div>
         )}
 
-        {task.status === 'IN_PROGRESS' && isTaskerAssigned && !task.tasker_completed_at && (
+        {canMarkComplete && (
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
-              <p className="font-semibold text-text-dark">Work in progress</p>
+              <p className="font-semibold text-text-dark">Escrow funded</p>
               <p className="text-text-muted">When you finish, notify the client so they can inspect and release escrow.</p>
             </div>
             <button type="button" onClick={() => markCompleteMutation.mutate()} disabled={markCompleteMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
@@ -161,19 +163,19 @@ function EscrowWorkflowCard({
           </div>
         )}
 
-        {task.status === 'IN_PROGRESS' && isTaskerAssigned && task.tasker_completed_at && (
+        {fundsHeld && isTaskerAssigned && taskerMarkedComplete && !paymentReleased && (
           <p className="rounded-md bg-blue-50 p-3 text-sm font-medium text-blue-800">
             Completion sent to the client. Escrow will release after client approval.
           </p>
         )}
 
-        {task.status === 'IN_PROGRESS' && isClient && !task.tasker_completed_at && (
+        {fundsHeld && isClient && !taskerMarkedComplete && !paymentReleased && (
           <p className="rounded-md bg-amber-50 p-3 text-sm font-medium text-amber-800">
             Funds are held. Wait for the tasker to mark the task complete before approving release.
           </p>
         )}
 
-        {task.status === 'IN_PROGRESS' && isClient && task.tasker_completed_at && (
+        {canApproveRelease && (
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
               <p className="font-semibold text-text-dark">Tasker says the work is complete</p>
@@ -186,7 +188,7 @@ function EscrowWorkflowCard({
           </div>
         )}
 
-        {task.status === 'COMPLETED' && (
+        {paymentReleased && (
           <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-primary">
             Payment has been released. Reviews are now open for both sides.
           </p>

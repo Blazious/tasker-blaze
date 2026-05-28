@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from apps.notifications.models import Notification
 from apps.notifications.utils import send_notification
+from apps.payments.models import Transaction
 
 from .models import Bid, Task, TaskCategory
 from .geo import validate_within_hard_geofence
@@ -264,7 +265,14 @@ class MarkTaskCompleteView(APIView):
         )
         if task.assigned_tasker_id != request.user.id:
             raise PermissionDenied("Only the assigned tasker can mark work complete.")
-        if task.status != Task.Status.IN_PROGRESS:
+        escrow_is_funded = (
+            hasattr(task, "transaction")
+            and task.transaction.status == Transaction.Status.ESCROWED
+        )
+        if task.status == Task.Status.ASSIGNED and escrow_is_funded:
+            task.status = Task.Status.IN_PROGRESS
+            task.save(update_fields=["status", "updated_at"])
+        elif task.status != Task.Status.IN_PROGRESS:
             raise ValidationError("Only in-progress tasks can be marked complete.")
         if task.tasker_completed_at:
             return Response(
