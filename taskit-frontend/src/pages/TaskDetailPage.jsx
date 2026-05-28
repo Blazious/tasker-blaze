@@ -141,12 +141,18 @@ function EscrowWorkflowCard({
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
               <p className="font-semibold text-text-dark">Waiting for escrow funding</p>
-              <p className="text-text-muted">Start work only after funds are held. If the client has paid, refresh escrow status.</p>
+              <p className="text-text-muted">If the client has paid, TaskiT will verify escrow before sending completion to the client.</p>
             </div>
-            <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md border border-primary px-4 py-2 font-semibold text-primary disabled:opacity-70">
-              {checkPaymentMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
-              Check Escrow
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md border border-primary px-4 py-2 font-semibold text-primary disabled:opacity-70">
+                {checkPaymentMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                Check Escrow
+              </button>
+              <button type="button" onClick={() => markCompleteMutation.mutate()} disabled={markCompleteMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
+                {markCompleteMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                Mark Task Complete
+              </button>
+            </div>
           </div>
         )}
 
