@@ -282,10 +282,25 @@ def run_face_match(kyc):
 
 
 def process_kyc(kyc):
+    ocr = {}
+    face = {}
+    processing_errors = []
+
     try:
         ocr = run_mindee_ocr(kyc)
-        face = run_face_match(kyc)
+    except Exception as exc:
+        logger.exception("KYC OCR processing failed for user %s", kyc.user_id)
+        processing_errors.append(f"OCR: {exc}")
+        ocr = {"raw": {"error": str(exc)}}
 
+    try:
+        face = run_face_match(kyc)
+    except Exception as exc:
+        logger.exception("KYC face matching failed for user %s", kyc.user_id)
+        processing_errors.append(f"Face match: {exc}")
+        face = {"confidence": None, "match": None, "confidence_label": "", "raw": {"error": str(exc)}}
+
+    try:
         kyc.extracted_full_name = ocr.get("full_name", "")
         kyc.extracted_student_id = ocr.get("student_id", "")
         kyc.extracted_date_of_birth = ocr.get("date_of_birth", "")
@@ -315,6 +330,9 @@ def process_kyc(kyc):
             kyc.status = KYCVerification.Status.PENDING_REVIEW
         else:
             kyc.status = KYCVerification.Status.NEEDS_RETRY
+
+        if processing_errors:
+            kyc.reviewer_notes = "\n".join(processing_errors)
     except Exception as exc:
         logger.exception("KYC processing failed for user %s", kyc.user_id)
         kyc.status = KYCVerification.Status.NEEDS_RETRY

@@ -83,3 +83,31 @@ class KYCVerificationTests(TestCase):
         self.assertEqual(response.data["status"], KYCVerification.Status.FACE_MISMATCH)
         self.assertEqual(response.data["face_match_confidence_label"], "Low")
         self.assertFalse(response.data["verification_summary"]["face_match"])
+
+    @override_settings(KYC_MOCK=False, KYC_FACE_MATCH_THRESHOLD=75)
+    @patch("apps.accounts.kyc.run_mindee_ocr")
+    @patch("apps.accounts.kyc.run_face_match")
+    def test_face_match_still_runs_when_ocr_fails(self, mock_face, mock_ocr):
+        mock_ocr.side_effect = ValueError("Mindee is not configured")
+        mock_face.return_value = {
+            "confidence": 88,
+            "match": True,
+            "confidence_label": "High",
+            "raw": {"mode": "test"},
+        }
+
+        response = self.api_client.post(
+            "/api/v1/auth/kyc/",
+            {
+                "id_front_image": tiny_gif("front.gif"),
+                "id_back_image": tiny_gif("back.gif"),
+                "live_face_image": tiny_gif("face.gif"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], KYCVerification.Status.NEEDS_RETRY)
+        self.assertEqual(response.data["face_match_confidence"], "88.00")
+        self.assertEqual(response.data["face_match_confidence_label"], "High")
+        self.assertTrue(response.data["verification_summary"]["face_match"])
