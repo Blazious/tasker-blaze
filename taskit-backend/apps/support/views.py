@@ -1,10 +1,17 @@
 from django.core.mail import send_mail
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.accounts.models import KYCVerification
+from apps.payments.models import DisputeNote, PlatformInvoice, Transaction
+from apps.reviews.models import UserReport
+from apps.tasks.models import Bid, Task
 
 from .gemini import TaskitSupportBot
 from .models import SupportConversation, SupportMessage, SupportTicket
@@ -144,3 +151,58 @@ class MySupportTicketsView(generics.ListAPIView):
 
     def get_queryset(self):
         return SupportTicket.objects.filter(user=self.request.user)
+
+
+class AdminOverviewView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        User = get_user_model()
+        open_ticket_statuses = [SupportTicket.Status.OPEN, SupportTicket.Status.REVIEWING]
+        open_report_statuses = [UserReport.Status.OPEN, UserReport.Status.REVIEWING]
+        pending_invoice_total = (
+            PlatformInvoice.objects.filter(status=PlatformInvoice.Status.PENDING).aggregate(total=Sum("amount"))["total"]
+            or 0
+        )
+        released_total = (
+            Transaction.objects.filter(status=Transaction.Status.RELEASED).aggregate(total=Sum("total_charged"))["total"]
+            or 0
+        )
+        escrowed_total = (
+            Transaction.objects.filter(status=Transaction.Status.ESCROWED).aggregate(total=Sum("total_charged"))["total"]
+            or 0
+        )
+
+        return Response(
+            {
+                "users": {
+                    "total": User.objects.count(),
+                    "verified_email": User.objects.filter(is_verified=True).count(),
+                    "kyc_verified": User.objects.filter(is_kyc_verified=True).count(),
+                    "taskers": User.objects.filter(is_tasker_active=True).count(),
+                },
+                "tasks": {
+                    "open": Task.objects.filter(status=Task.Status.OPEN).count(),
+                    "assigned": Task.objects.filter(status=Task.Status.ASSIGNED).count(),
+                    "in_progress": Task.objects.filter(status=Task.Status.IN_PROGRESS).count(),
+                    "completed": Task.objects.filter(status=Task.Status.COMPLETED).count(),
+                    "disputed": Task.objects.filter(status=Task.Status.DISPUTED).count(),
+                    "bids": Bid.objects.count(),
+                },
+                "ops": {
+                    "support_tickets_open": SupportTicket.objects.filter(status__in=open_ticket_statuses).count(),
+                    "user_reports_open": UserReport.objects.filter(status__in=open_report_statuses).count(),
+                    "payment_disputes": DisputeNote.objects.count(),
+                    "kyc_pending_review": KYCVerification.objects.filter(status=KYCVerification.Status.PENDING_REVIEW).count(),
+                    "kyc_needs_retry": KYCVerification.objects.filter(status=KYCVerification.Status.NEEDS_RETRY).count(),
+                    "kyc_face_mismatch": KYCVerification.objects.filter(status=KYCVerification.Status.FACE_MISMATCH).count(),
+                },
+                "billing": {
+                    "pending_invoices": PlatformInvoice.objects.filter(status=PlatformInvoice.Status.PENDING).count(),
+                    "pending_invoice_total": str(pending_invoice_total),
+                    "escrowed_total": str(escrowed_total),
+                    "released_total": str(released_total),
+                },
+                "admin_email": getattr(settings, "ADMIN_EMAIL", ""),
+            }
+        )

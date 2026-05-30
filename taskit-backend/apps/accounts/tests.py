@@ -155,6 +155,47 @@ class StudentEmailAccessTests(TestCase):
     def test_accepts_personal_jkuat_student_domain(self):
         validate_jkuat_student_email("cliptoman@students.jkuat.ac.ke")
 
+    @override_settings(ADMIN_EMAIL="admintaskit@gmail.com")
+    def test_admin_email_can_login_when_created_as_superuser(self):
+        User = get_user_model()
+        User.objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/auth/login/",
+            {"email": "admintaskit@gmail.com", "password": "Adminpass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['access']}")
+        profile_response = api_client.get("/api/v1/auth/me/")
+        self.assertTrue(profile_response.data["is_staff"])
+        self.assertTrue(profile_response.data["is_superuser"])
+
+    @override_settings(ADMIN_EMAIL="admintaskit@gmail.com")
+    def test_admin_email_cannot_self_register_publicly(self):
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/auth/register/",
+            {
+                "email": "admintaskit@gmail.com",
+                "password": "Adminpass123!",
+                "full_name": "TaskiT Admin",
+                "phone_number": "+254700000000",
+                "gender": "NOT_SPECIFIED",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     @override_settings(EMAIL_VERIFICATION_ENABLED=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_registration_requires_email_verification_by_default(self):
         api_client = APIClient()

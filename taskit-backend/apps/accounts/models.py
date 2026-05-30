@@ -44,7 +44,9 @@ class CustomUserManager(BaseUserManager):
             raise ValueError("The email field must be set.")
 
         email = self.normalize_email(email).lower()
-        validate_jkuat_student_email(email)
+        allow_non_student_email = extra_fields.pop("allow_non_student_email", False)
+        if not allow_non_student_email:
+            validate_jkuat_student_email(email)
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.full_clean()
@@ -61,6 +63,7 @@ class CustomUserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
 
+        extra_fields["allow_non_student_email"] = True
         return self.create_user(email, password, **extra_fields)
 
 
@@ -116,7 +119,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         super().clean()
         if self.email:
             self.email = self.__class__.objects.normalize_email(self.email).lower()
-        validate_jkuat_student_email(self.email)
+        if not (self.is_staff or self.is_superuser):
+            validate_jkuat_student_email(self.email)
 
         if self.year_of_study is not None and self.year_of_study not in range(1, 5):
             raise ValidationError(

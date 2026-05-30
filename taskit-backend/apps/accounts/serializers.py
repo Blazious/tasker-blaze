@@ -34,7 +34,9 @@ class LoginSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         email = value.lower()
-        validate_jkuat_student_email(email)
+        admin_email = getattr(settings, "ADMIN_EMAIL", "").strip().lower()
+        if email != admin_email:
+            validate_jkuat_student_email(email)
         return email
 
     def validate(self, attrs):
@@ -73,6 +75,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "available_until",
             "is_verified",
             "is_kyc_verified",
+            "is_staff",
+            "is_superuser",
             "date_joined",
             "last_seen",
         )
@@ -81,6 +85,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "email",
             "is_verified",
             "is_kyc_verified",
+            "is_staff",
+            "is_superuser",
             "date_joined",
             "last_seen",
         )

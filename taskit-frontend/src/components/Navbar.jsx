@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, LogOut, Menu, User, X } from 'lucide-react'
+import { Bell, LogOut, Menu, ShieldCheck, User, X } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore.js'
@@ -21,7 +21,12 @@ function Navbar() {
   const navigate = useNavigate()
   const clearAuth = useAuthStore((state) => state.clearAuth)
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const user = useAuthStore((state) => state.user)
   const [unreadCount, setUnreadCount] = useState(0)
+  const visibleNavItems =
+    user?.is_staff || user?.is_superuser
+      ? [...navItems, { label: 'Admin', to: '/admin-panel' }]
+      : navItems
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -63,7 +68,7 @@ function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -78,6 +83,7 @@ function Navbar() {
               <span className="inline-flex items-center gap-1.5">
                 {item.label === 'Notifications' && <Bell size={16} />}
                 {item.label === 'Profile' && <User size={16} />}
+                {item.label === 'Admin' && <ShieldCheck size={16} />}
                 {item.label}
               </span>
               {item.hasBadge && unreadCount > 0 && (
@@ -123,7 +129,7 @@ function Navbar() {
       {isOpen && (
         <div className="border-t border-slate-200 bg-white px-4 py-3 md:hidden">
           <div className="flex flex-col gap-2">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

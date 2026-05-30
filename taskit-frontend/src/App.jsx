@@ -4,6 +4,7 @@ import TaskitAssistant from './components/TaskitAssistant.jsx'
 import ProtectedRoute from './routes/ProtectedRoute.jsx'
 import ChatPage from './pages/ChatPage.jsx'
 import BillingPage from './pages/BillingPage.jsx'
+import AdminPanelPage from './pages/AdminPanelPage.jsx'
 import CreateTaskPage from './pages/CreateTaskPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import EarningsPage from './pages/EarningsPage.jsx'
@@ -32,6 +33,7 @@ function App() {
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/admin-panel" element={<AdminPanelPage />} />
             <Route path="/my-tasks" element={<MyTasksPage />} />
             <Route path="/tasks" element={<TaskFeedPage />} />
             <Route path="/tasks/:id" element={<TaskDetailPage />} />

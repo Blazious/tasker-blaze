@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     MySupportConversationView,
     MySupportTicketsView,
+    AdminOverviewView,
     SupportChatView,
     SupportEscalationView,
     SupportHealthView,
@@ -14,4 +15,5 @@ urlpatterns = [
     path("chat/", SupportChatView.as_view(), name="support-chat"),
     path("escalate/", SupportEscalationView.as_view(), name="support-escalate"),
     path("tickets/", MySupportTicketsView.as_view(), name="support-tickets"),
+    path("admin/overview/", AdminOverviewView.as_view(), name="admin-overview"),
 ]
