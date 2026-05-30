@@ -135,7 +135,7 @@ class KYCVerification(models.Model):
         related_name="kyc_verification",
     )
     id_front_image = models.ImageField(upload_to="kyc/id_fronts/")
-    id_back_image = models.ImageField(upload_to="kyc/id_backs/")
+    id_back_image = models.ImageField(upload_to="kyc/id_backs/", blank=True, null=True)
     live_face_image = models.ImageField(upload_to="kyc/live_faces/", blank=True, null=True)
     extracted_full_name = models.CharField(max_length=255, blank=True)
     extracted_student_id = models.CharField(max_length=64, blank=True)

@@ -183,7 +183,7 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
         )
         extra_kwargs = {
             "id_front_image": {"write_only": True},
-            "id_back_image": {"write_only": True},
+            "id_back_image": {"write_only": True, "required": False},
             "live_face_image": {"write_only": True, "required": False},
         }
 
@@ -211,6 +211,4 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
         if self.context.get("request") and self.context["request"].method == "POST":
             if not attrs.get("id_front_image"):
                 raise serializers.ValidationError({"id_front_image": "Front of student ID is required."})
-            if not attrs.get("id_back_image"):
-                raise serializers.ValidationError({"id_back_image": "Back of student ID is required."})
         return attrs

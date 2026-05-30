@@ -211,12 +211,9 @@ def _get_easyocr_reader():
 def run_local_ocr(kyc):
     reader = _get_easyocr_reader()
     front_image = _decode_image(kyc.id_front_image)
-    back_image = _decode_image(kyc.id_back_image)
     front_result = reader.readtext(front_image)
-    back_result = reader.readtext(back_image)
     front_text = " ".join(text for _, text, _ in front_result)
-    back_text = " ".join(text for _, text, _ in back_result)
-    combined_text = f"{front_text} {back_text}"
+    combined_text = front_text
     parsed = _parse_student_id_text(combined_text)
 
     return {
@@ -235,7 +232,6 @@ def run_local_ocr(kyc):
         "raw": {
             "provider": "easyocr",
             "front_text": front_text,
-            "back_text": back_text,
             "parsed": parsed,
         },
     }
@@ -277,17 +273,7 @@ def run_mindee_ocr(kyc):
     front_raw = front_response.json()
     front_prediction = _extract_text_prediction(front_raw)
 
-    with kyc.id_back_image.open("rb") as back_file:
-        back_response = requests.post(
-            endpoint,
-            headers=headers,
-            files={"document": back_file},
-            timeout=getattr(settings, "KYC_HTTP_TIMEOUT", 30),
-        )
-    back_response.raise_for_status()
-    back_raw = back_response.json()
-    back_text = str(back_raw).lower()
-    parsed_text = _parse_student_id_text(str(front_raw) + " " + str(back_raw))
+    parsed_text = _parse_student_id_text(str(front_raw))
 
     return {
         "full_name": _first_present(front_prediction, "student_name", "full_name", "name") or parsed_text["full_name"],
@@ -300,9 +286,9 @@ def run_mindee_ocr(kyc):
         "school": _first_present(front_prediction, "school", "faculty", "university_name") or parsed_text["school"],
         "degree": _first_present(front_prediction, "degree", "program", "course") or parsed_text["degree"],
         "validity_period": _first_present(front_prediction, "validity_period"),
-        "stamp_detected": "jkuat" in back_text or "jomo kenyatta university" in back_text,
+        "stamp_detected": bool(re.search(r"\b(jkuat|jomo kenyatta university|registrar|official stamp)\b", str(front_raw), re.IGNORECASE)),
         "id_photo_detected": _has_object_detection(front_prediction, "student_photo", "photo", "passport_photo"),
-        "raw": {"provider": "mindee", "front": front_raw, "back": back_raw, "parsed_text": parsed_text},
+        "raw": {"provider": "mindee", "front": front_raw, "parsed_text": parsed_text},
     }
 
 

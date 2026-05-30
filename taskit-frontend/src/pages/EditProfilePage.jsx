@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { AlertTriangle, BadgeCheck, Camera, CheckCircle2, FileScan, IdCard, Loader2, RefreshCw, Save, ShieldCheck, UploadCloud } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCircle2, IdCard, Loader2, RefreshCw, Save, ShieldCheck, UploadCloud } from 'lucide-react'
 import { getKycStatus, getMe, prefillProfileFromKyc, submitKyc, updateProfile } from '../api/auth.js'
 import { useAuthStore } from '../store/authStore.js'
 import { getApiErrorMessage } from '../utils/apiError.js'
@@ -28,12 +28,10 @@ export default function EditProfilePage() {
   })
   const [kycForm, setKycForm] = useState({
     id_front_image: null,
-    id_back_image: null,
     live_face_image: null,
   })
   const [kycPreviewUrls, setKycPreviewUrls] = useState({
     id_front_image: '',
-    id_back_image: '',
     live_face_image: '',
   })
 
@@ -169,9 +167,8 @@ export default function EditProfilePage() {
             </p>
             <h2 className="mt-2 text-2xl font-bold text-primary">Verify your student ID</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted">
-              Upload the front and back of your JKUAT student ID. The OCR result can prefill your name,
-              registration number, department, school, and degree. Add a live face photo when you are ready
-              for face-match confidence.
+              Upload the front of your JKUAT student ID. The OCR result can prefill your name,
+              registration number, department, school, and degree. Add a live face photo for face-match confidence.
             </p>
           </div>
           <span className={`inline-flex w-fit rounded-full px-3 py-1 text-sm font-semibold ${statusTone[kyc?.status] ?? statusTone.NOT_STARTED}`}>
@@ -183,7 +180,6 @@ export default function EditProfilePage() {
           <div className="grid gap-4 md:grid-cols-3">
             {[
               ['id_front_image', 'Front of student ID', IdCard, 'Required'],
-              ['id_back_image', 'Back of student ID', FileScan, 'Required'],
               ['live_face_image', 'Live face capture', Camera, 'Recommended'],
             ].map(([key, label, Icon, badge]) => (
               <label key={key} className="grid cursor-pointer gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 transition hover:border-primary/50 hover:bg-emerald-50/50">
@@ -223,7 +219,7 @@ export default function EditProfilePage() {
 
           <button
             type="submit"
-            disabled={kycMutation.isPending || !kycForm.id_front_image || !kycForm.id_back_image}
+            disabled={kycMutation.isPending || !kycForm.id_front_image}
             className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
           >
             {kycMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : <UploadCloud size={18} />}

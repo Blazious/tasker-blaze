@@ -37,7 +37,6 @@ class KYCVerificationTests(TestCase):
             "/api/v1/auth/kyc/",
             {
                 "id_front_image": tiny_gif("front.gif"),
-                "id_back_image": tiny_gif("back.gif"),
             },
             format="multipart",
         )
@@ -73,7 +72,6 @@ class KYCVerificationTests(TestCase):
             "/api/v1/auth/kyc/",
             {
                 "id_front_image": tiny_gif("front.gif"),
-                "id_back_image": tiny_gif("back.gif"),
                 "live_face_image": tiny_gif("face.gif"),
             },
             format="multipart",
@@ -100,7 +98,6 @@ class KYCVerificationTests(TestCase):
             "/api/v1/auth/kyc/",
             {
                 "id_front_image": tiny_gif("front.gif"),
-                "id_back_image": tiny_gif("back.gif"),
                 "live_face_image": tiny_gif("face.gif"),
             },
             format="multipart",
@@ -130,7 +127,6 @@ class KYCVerificationTests(TestCase):
             "/api/v1/auth/kyc/",
             {
                 "id_front_image": tiny_gif("front.gif"),
-                "id_back_image": tiny_gif("back.gif"),
             },
             format="multipart",
         )
