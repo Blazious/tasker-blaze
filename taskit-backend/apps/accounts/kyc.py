@@ -294,11 +294,26 @@ def run_mindee_ocr(kyc):
     model_id = getattr(settings, "MINDEE_MODEL_ID", "")
     endpoint = getattr(settings, "MINDEE_ENDPOINT_URL", "")
     if provider in {"local", "easyocr"}:
+        if not getattr(settings, "KYC_ENABLE_LOCAL_OCR", False):
+            raise ValueError("Local OCR is disabled. Configure Mindee or enable KYC_ENABLE_LOCAL_OCR.")
         return run_local_ocr(kyc)
     if api_key and model_id:
         return run_mindee_model_ocr(kyc, api_key, model_id)
     if not api_key or not endpoint:
-        return run_local_ocr(kyc)
+        return {
+            "full_name": kyc.user.full_name,
+            "student_id": kyc.user.student_id or "",
+            "department": kyc.user.department or "",
+            "school": "",
+            "degree": "",
+            "stamp_detected": False,
+            "id_photo_detected": True,
+            "raw": {
+                "provider": "manual_review",
+                "manual_review_recommended": True,
+                "reason": "Mindee is not fully configured and local OCR is disabled.",
+            },
+        }
 
     headers = {"Authorization": f"Token {api_key}"}
     with kyc.id_front_image.open("rb") as front_file:
@@ -354,6 +369,17 @@ def run_face_match(kyc):
 
     if getattr(settings, "KYC_MOCK", True):
         return {"confidence": Decimal("88.00"), "match": True, "confidence_label": "High", "raw": {"mode": "mock"}}
+
+    if not getattr(settings, "KYC_ENABLE_FACE_MATCH", False):
+        return {
+            "confidence": None,
+            "match": None,
+            "confidence_label": "",
+            "raw": {
+                "skipped": "Face matching is disabled. Admin should compare the uploaded ID and live face manually.",
+                "manual_review_recommended": True,
+            },
+        }
 
     import numpy as np
 
@@ -432,8 +458,14 @@ def process_kyc(kyc):
 
         minimum_confidence = Decimal(str(getattr(settings, "KYC_FACE_MATCH_THRESHOLD", 75)))
         has_identity_fields = bool(kyc.extracted_full_name or kyc.extracted_student_id)
+        manual_review_recommended = bool(
+            kyc.ocr_raw_response.get("manual_review_recommended")
+            or kyc.face_match_raw_response.get("manual_review_recommended")
+        )
         if kyc.face_match_confidence is not None and kyc.face_match_confidence < minimum_confidence:
             kyc.status = KYCVerification.Status.FACE_MISMATCH
+        elif manual_review_recommended and has_identity_fields:
+            kyc.status = KYCVerification.Status.PENDING_REVIEW
         elif kyc.stamp_detected and has_identity_fields:
             kyc.status = KYCVerification.Status.PENDING_REVIEW
         else:

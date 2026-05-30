@@ -141,6 +141,18 @@ ADMIN_EMAIL = config("ADMIN_EMAIL", default="admin@taskit.co.ke")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173").rstrip("/")
 KYC_MOCK = config("KYC_MOCK", default="True").lower() in {"1", "true", "yes", "on"}
 KYC_OCR_PROVIDER = config("KYC_OCR_PROVIDER", default="mindee")
+KYC_ENABLE_LOCAL_OCR = config("KYC_ENABLE_LOCAL_OCR", default="False").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+KYC_ENABLE_FACE_MATCH = config("KYC_ENABLE_FACE_MATCH", default="False").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 KYC_FACE_MATCH_THRESHOLD = config("KYC_FACE_MATCH_THRESHOLD", default="75")
 KYC_HTTP_TIMEOUT = config("KYC_HTTP_TIMEOUT", default=30, cast=int)
 MINDEE_API_KEY = config("MINDEE_API_KEY", default="")

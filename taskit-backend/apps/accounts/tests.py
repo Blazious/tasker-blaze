@@ -111,6 +111,29 @@ class KYCVerificationTests(TestCase):
         self.assertEqual(response.data["face_match_confidence_label"], "High")
         self.assertTrue(response.data["verification_summary"]["face_match"])
 
+    @override_settings(
+        KYC_MOCK=False,
+        KYC_ENABLE_LOCAL_OCR=False,
+        KYC_ENABLE_FACE_MATCH=False,
+        MINDEE_API_KEY="",
+        MINDEE_MODEL_ID="",
+        MINDEE_ENDPOINT_URL="",
+    )
+    def test_kyc_without_external_processors_goes_to_manual_review(self):
+        response = self.api_client.post(
+            "/api/v1/auth/kyc/",
+            {
+                "id_front_image": tiny_gif("front.gif"),
+                "live_face_image": tiny_gif("face.gif"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], KYCVerification.Status.PENDING_REVIEW)
+        self.assertEqual(response.data["verification_summary"]["ocr_provider"], "manual_review")
+        self.assertIsNone(response.data["verification_summary"]["face_match"])
+
     @override_settings(KYC_MOCK=False, MINDEE_API_KEY="test-key", MINDEE_MODEL_ID="test-model")
     @patch("apps.accounts.kyc.run_mindee_model_ocr")
     def test_mindee_model_id_path_is_used_when_configured(self, mock_model_ocr):
