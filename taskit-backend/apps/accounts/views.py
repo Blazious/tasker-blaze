@@ -18,7 +18,7 @@ from .serializers import (
     RegisterSerializer,
     UserProfileSerializer,
 )
-from .kyc import process_kyc
+from .kyc import normalize_jkuat_college, process_kyc
 from .models import KYCVerification
 
 User = get_user_model()
@@ -276,7 +276,7 @@ class KYCPrefillProfileView(APIView):
         if kyc.extracted_student_id:
             user.student_id = kyc.extracted_student_id
         if kyc.extracted_department or kyc.extracted_school:
-            user.department = kyc.extracted_department or kyc.extracted_school
+            user.department = kyc.extracted_department or normalize_jkuat_college(kyc.extracted_school)
 
         user.save(update_fields=["full_name", "student_id", "department"])
         return Response(UserProfileSerializer(user).data)

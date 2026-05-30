@@ -5,6 +5,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
+from .kyc import normalize_jkuat_college
 from .models import KYCVerification
 
 
@@ -135,3 +136,7 @@ class KYCVerificationTests(TestCase):
         mock_model_ocr.assert_called_once()
         self.assertEqual(response.data["status"], KYCVerification.Status.PENDING_REVIEW)
         self.assertEqual(response.data["verification_summary"]["ocr_provider"], "mindee_model")
+
+    def test_jkuat_college_acronyms_are_normalized(self):
+        self.assertEqual(normalize_jkuat_college("CoHRED"), "College of Human Resource Development")
+        self.assertEqual(normalize_jkuat_college("COPAS"), "College of Pure and Applied Sciences")

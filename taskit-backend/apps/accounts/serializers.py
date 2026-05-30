@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from .kyc import normalize_jkuat_college
 from .models import KYCVerification, validate_jkuat_student_email
 
 User = get_user_model()
@@ -191,8 +192,9 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
         return {
             "full_name": obj.extracted_full_name,
             "student_id": obj.extracted_student_id,
-            "department": obj.extracted_department or obj.extracted_school or obj.extracted_degree,
+            "department": obj.extracted_department or normalize_jkuat_college(obj.extracted_school) or obj.extracted_degree,
             "degree": obj.extracted_degree,
+            "school": normalize_jkuat_college(obj.extracted_school),
         }
 
     def get_face_match_confidence_label(self, obj):

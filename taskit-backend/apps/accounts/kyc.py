@@ -15,9 +15,32 @@ logger = logging.getLogger(__name__)
 _FACE_APP = None
 _OCR_READER = None
 
+JKUAT_COLLEGE_NAMES = {
+    "COETEC": "College of Engineering and Technology",
+    "COPAS": "College of Pure and Applied Sciences",
+    "COHES": "College of Health Sciences",
+    "COANRE": "College of Agriculture and Natural Resources",
+    "COHRED": "College of Human Resource Development",
+}
+
 
 def _clean_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def normalize_jkuat_college(value):
+    text = _clean_text(value)
+    if not text:
+        return ""
+
+    normalized = re.sub(r"[^A-Z]", "", text.upper())
+    if normalized in JKUAT_COLLEGE_NAMES:
+        return JKUAT_COLLEGE_NAMES[normalized]
+
+    for acronym, full_name in JKUAT_COLLEGE_NAMES.items():
+        if re.search(rf"\b{re.escape(acronym)}\b", text, re.IGNORECASE):
+            return full_name
+    return text
 
 
 def _match_pattern(text, *patterns):
@@ -33,7 +56,7 @@ def _parse_student_id_text(text):
     return {
         "full_name": _match_pattern(
             normalized,
-            r"(?:name|student name)\s*[:\-]?\s*([A-Z][A-Z\s.'-]{3,80})(?=\s+(?:reg|registration|department|school|faculty|degree|program|course)|$)",
+            r"(?:name|student name)\s*[:\-]?\s*([A-Z][A-Z\s.'-]{3,80})(?=\s+(?:reg|registration|student id|department|school|faculty|college|degree|program|programme|course)|$)",
         ),
         "student_id": _match_pattern(
             normalized,
@@ -46,11 +69,11 @@ def _parse_student_id_text(text):
         ),
         "school": _match_pattern(
             normalized,
-            r"(?:school|faculty)\s*[:\-]?\s*([A-Z][A-Z\s&.'-]{2,80})(?=\s+(?:department|degree|program|course|reg)|$)",
+            r"(?:school|faculty|college)\s*[:\-]?\s*([A-Z][A-Z\s&.'-]{2,80})(?=\s+(?:department|degree|program|programme|course|reg|student id)|$)",
         ),
         "degree": _match_pattern(
             normalized,
-            r"(?:degree|program|programme|course)\s*[:\-]?\s*([A-Z][A-Z\s&.'-]{2,100})(?=\s+(?:department|school|faculty|reg)|$)",
+            r"(?:degree|program|programme|course)\s*[:\-]?\s*([A-Z][A-Z\s&.'-]{2,100})(?=\s+(?:department|school|faculty|college|reg|student id)|$)",
         ),
         "university_name": "Jomo Kenyatta University of Agriculture and Technology"
         if re.search(r"\b(jkuat|jomo kenyatta university)\b", normalized, re.IGNORECASE)
@@ -102,6 +125,22 @@ def _field_value(field):
     if content is not None:
         return content
     return str(field) if field else ""
+
+
+def _first_model_field(fields, *keys):
+    normalized_fields = {
+        re.sub(r"[^a-z0-9]", "", str(key).lower()): value
+        for key, value in fields.items()
+    }
+    for key in keys:
+        direct_value = fields.get(key)
+        if direct_value:
+            return _field_value(direct_value)
+        normalized_key = re.sub(r"[^a-z0-9]", "", key.lower())
+        value = normalized_fields.get(normalized_key)
+        if value:
+            return _field_value(value)
+    return ""
 
 
 def _has_object_detection(data, *keys):
@@ -162,18 +201,18 @@ def run_mindee_model_ocr(kyc, api_key, model_id):
     parsed_text = _parse_student_id_text(str(raw))
 
     return {
-        "full_name": _field_value(fields.get("student_name") or fields.get("full_name") or fields.get("name")) or parsed_text["full_name"],
-        "student_id": _field_value(fields.get("student_id") or fields.get("registration_number") or fields.get("reg_number")) or parsed_text["student_id"],
-        "date_of_birth": _field_value(fields.get("date_of_birth") or fields.get("dob")),
-        "issue_date": _field_value(fields.get("issue_date") or fields.get("issued_date")),
-        "expiration_date": _field_value(fields.get("expiration_date") or fields.get("expiry_date") or fields.get("expiry")),
-        "university_name": _field_value(fields.get("university_name") or fields.get("institution_name")) or parsed_text["university_name"],
-        "department": _field_value(fields.get("department")) or parsed_text["department"],
-        "school": _field_value(fields.get("school") or fields.get("faculty")) or parsed_text["school"],
-        "degree": _field_value(fields.get("degree") or fields.get("program") or fields.get("course")) or parsed_text["degree"],
-        "validity_period": _field_value(fields.get("validity_period")),
+        "full_name": _first_model_field(fields, "student_name", "student name", "full_name", "name") or parsed_text["full_name"],
+        "student_id": _first_model_field(fields, "student_id", "student id", "registration_number", "reg_number") or parsed_text["student_id"],
+        "date_of_birth": _first_model_field(fields, "date_of_birth", "date of birth", "dob"),
+        "issue_date": _first_model_field(fields, "issue_date", "issue date", "issued_date"),
+        "expiration_date": _first_model_field(fields, "expiration_date", "expiration date", "expiry_date", "expiry"),
+        "university_name": _first_model_field(fields, "university_college_name", "university/college name", "university_name", "college_name", "institution_name") or parsed_text["university_name"],
+        "department": parsed_text["department"],
+        "school": normalize_jkuat_college(_first_model_field(fields, "school", "faculty", "college") or parsed_text["school"]),
+        "degree": _first_model_field(fields, "course", "degree", "program", "programme") or parsed_text["degree"],
+        "validity_period": _first_model_field(fields, "validity_period", "validity period"),
         "stamp_detected": bool(re.search(r"\b(jkuat|jomo kenyatta university|registrar|official stamp)\b", str(raw), re.IGNORECASE)),
-        "id_photo_detected": True,
+        "id_photo_detected": bool(_first_model_field(fields, "student_photo", "student photo", "photo", "passport_photo")) or True,
         "raw": {"provider": "mindee_model", "model_id": model_id, "response": raw},
     }
 
@@ -224,7 +263,7 @@ def run_local_ocr(kyc):
         "expiration_date": _match_pattern(combined_text, r"(?:exp(?:iry|iration)? date|expires)\s*[:\-]?\s*([0-9\/\-.]{6,12})"),
         "university_name": parsed["university_name"],
         "department": parsed["department"],
-        "school": parsed["school"],
+        "school": normalize_jkuat_college(parsed["school"]),
         "degree": parsed["degree"],
         "validity_period": _match_pattern(combined_text, r"(?:validity|valid)\s*[:\-]?\s*([A-Z0-9\s\/\-.]{6,40})"),
         "stamp_detected": bool(re.search(r"\b(jkuat|jomo kenyatta university|registrar|official stamp)\b", combined_text, re.IGNORECASE)),
@@ -283,7 +322,7 @@ def run_mindee_ocr(kyc):
         "expiration_date": _first_present(front_prediction, "expiration_date", "expiry_date", "expiry"),
         "university_name": _first_present(front_prediction, "university_name", "institution_name") or parsed_text["university_name"],
         "department": _first_present(front_prediction, "department") or parsed_text["department"],
-        "school": _first_present(front_prediction, "school", "faculty", "university_name") or parsed_text["school"],
+        "school": normalize_jkuat_college(_first_present(front_prediction, "school", "faculty", "college") or parsed_text["school"]),
         "degree": _first_present(front_prediction, "degree", "program", "course") or parsed_text["degree"],
         "validity_period": _first_present(front_prediction, "validity_period"),
         "stamp_detected": bool(re.search(r"\b(jkuat|jomo kenyatta university|registrar|official stamp)\b", str(front_raw), re.IGNORECASE)),
