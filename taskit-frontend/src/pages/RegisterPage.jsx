@@ -7,6 +7,15 @@ import CampusBackdrop from '../components/CampusBackdrop.jsx'
 import { CAMPUS_BACKGROUNDS } from '../constants/campusImages.js'
 
 const JKUAT_DOMAIN = '@students.jkuat.ac.ke'
+const RESERVED_EMAIL_NAMES = new Set(['admin', 'administrator', 'example', 'fake', 'jkuat', 'student', 'support', 'taskit', 'test', 'user'])
+
+function validateStudentEmail(email) {
+  if (!email.endsWith(JKUAT_DOMAIN)) return false
+  const localPart = email.slice(0, -JKUAT_DOMAIN.length)
+  if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(localPart)) return false
+  const compactLocal = localPart.replace(/[^a-z0-9]/g, '')
+  return !RESERVED_EMAIL_NAMES.has(compactLocal)
+}
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -35,8 +44,8 @@ export default function RegisterPage() {
     setError('')
 
     const email = form.email.trim().toLowerCase()
-    if (!email.endsWith(JKUAT_DOMAIN)) {
-      setError('Only JKUAT student emails are allowed')
+    if (!validateStudentEmail(email)) {
+      setError('Use your personal JKUAT student email ending in @students.jkuat.ac.ke')
       return
     }
 

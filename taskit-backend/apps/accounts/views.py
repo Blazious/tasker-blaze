@@ -66,9 +66,7 @@ class RegisterView(APIView):
 
     def send_verification_email(self, request, user):
         token = signing.dumps({"user_id": user.pk}, salt=EMAIL_VERIFICATION_SALT)
-        verification_url = request.build_absolute_uri(
-            f"/api/v1/auth/verify-email/?token={token}"
-        )
+        verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
         send_mail(
             subject="Verify your Taskit account",
             message=(

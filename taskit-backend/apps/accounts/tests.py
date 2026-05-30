@@ -1,12 +1,13 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from .kyc import normalize_jkuat_college
-from .models import KYCVerification
+from .models import KYCVerification, validate_jkuat_student_email
 
 
 def tiny_gif(name):
@@ -140,3 +141,37 @@ class KYCVerificationTests(TestCase):
     def test_jkuat_college_acronyms_are_normalized(self):
         self.assertEqual(normalize_jkuat_college("CoHRED"), "College of Human Resource Development")
         self.assertEqual(normalize_jkuat_college("COPAS"), "College of Pure and Applied Sciences")
+
+
+class StudentEmailAccessTests(TestCase):
+    def test_rejects_non_jkuat_student_domains(self):
+        with self.assertRaises(ValidationError):
+            validate_jkuat_student_email("student@gmail.com")
+
+    def test_rejects_reserved_dummy_local_parts(self):
+        with self.assertRaises(ValidationError):
+            validate_jkuat_student_email("test@students.jkuat.ac.ke")
+
+    def test_accepts_personal_jkuat_student_domain(self):
+        validate_jkuat_student_email("cliptoman@students.jkuat.ac.ke")
+
+    @override_settings(EMAIL_VERIFICATION_ENABLED=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_registration_requires_email_verification_by_default(self):
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/auth/register/",
+            {
+                "email": "fresh.student@students.jkuat.ac.ke",
+                "password": "Testpass123!",
+                "full_name": "Fresh Student",
+                "phone_number": "+254700000011",
+                "gender": "NOT_SPECIFIED",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(email="fresh.student@students.jkuat.ac.ke")
+        self.assertFalse(user.is_verified)
+        self.assertTrue(response.data["email_verification_required"])

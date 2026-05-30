@@ -3,14 +3,39 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+import re
 
 
 JKUAT_STUDENT_EMAIL_DOMAIN = "@students.jkuat.ac.ke"
+RESERVED_STUDENT_EMAIL_NAMES = {
+    "admin",
+    "administrator",
+    "example",
+    "fake",
+    "jkuat",
+    "student",
+    "support",
+    "taskit",
+    "test",
+    "user",
+}
 
 
 def validate_jkuat_student_email(email):
-    if not email or not email.lower().endswith(JKUAT_STUDENT_EMAIL_DOMAIN):
+    normalized_email = (email or "").strip().lower()
+    if "@" not in normalized_email:
+        raise ValidationError("A valid JKUAT student email is required.")
+
+    local_part, _, domain = normalized_email.rpartition("@")
+    if domain != JKUAT_STUDENT_EMAIL_DOMAIN.removeprefix("@"):
         raise ValidationError("Only JKUAT student emails are allowed.")
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,63}", local_part):
+        raise ValidationError("Use your official JKUAT student email address.")
+
+    compact_local = re.sub(r"[^a-z0-9]", "", local_part)
+    if compact_local in RESERVED_STUDENT_EMAIL_NAMES:
+        raise ValidationError("Use your personal JKUAT student email address.")
 
 
 class CustomUserManager(BaseUserManager):
