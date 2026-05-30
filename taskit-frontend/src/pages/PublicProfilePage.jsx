@@ -30,6 +30,28 @@ function Stars({ value }) {
   )
 }
 
+function RatingBreakdown({ review }) {
+  const items = [
+    ['Communication', review.communication_rating],
+    ['Punctuality', review.punctuality_rating],
+    ['Quality', review.quality_rating],
+  ]
+
+  return (
+    <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-md bg-slate-50 px-3 py-2">
+          <p className="text-xs font-semibold text-text-muted">{label}</p>
+          <div className="mt-1 flex items-center gap-2">
+            <Stars value={value ?? review.rating} />
+            <span className="font-semibold text-text-dark">{value ?? review.rating}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function PublicProfilePage() {
   const { id } = useParams()
   const currentUser = useAuthStore((state) => state.user)
@@ -116,6 +138,19 @@ export default function PublicProfilePage() {
         </div>
       </div>
 
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          ['Communication', profile.rating_breakdown?.communication],
+          ['Punctuality', profile.rating_breakdown?.punctuality],
+          ['Quality', profile.rating_breakdown?.quality],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-text-muted">{label}</p>
+            <div className="mt-2 flex items-center gap-3"><Stars value={value ?? 0} /><span className="font-bold">{value ?? 0}</span></div>
+          </div>
+        ))}
+      </div>
+
       {isOwnProfile && (
         <div className="rounded-lg border border-blue-100 bg-blue-50 p-6 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -178,6 +213,7 @@ export default function PublicProfilePage() {
                 <span className="text-sm text-text-muted">{new Date(review.created_at).toLocaleDateString()}</span>
               </div>
               <div className="mt-2"><Stars value={review.rating} /></div>
+              <RatingBreakdown review={review} />
               <p className="mt-2 text-text-muted">{review.comment}</p>
             </div>
           ))}

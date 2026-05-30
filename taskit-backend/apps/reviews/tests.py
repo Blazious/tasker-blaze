@@ -126,8 +126,33 @@ class ReviewTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["full_name"], self.tasker.full_name)
         self.assertEqual(response.data["average_rating"], 5.0)
+        self.assertEqual(response.data["rating_breakdown"]["communication"], 5.0)
+        self.assertEqual(response.data["rating_breakdown"]["punctuality"], 5.0)
+        self.assertEqual(response.data["rating_breakdown"]["quality"], 5.0)
         self.assertEqual(response.data["total_reviews"], 1)
         self.assertEqual(response.data["completed_tasks_count"], 1)
         self.assertEqual(response.data["badges"], ["First Task"])
         self.assertEqual(response.data["recent_reviews"][0]["comment"], "Excellent work")
         self.assertEqual(response.data["completed_task_history"][0]["title"], self.task.title)
+
+    def test_submit_review_accepts_category_ratings(self):
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.post(
+            f"/api/v1/reviews/submit/{self.task.id}/",
+            {
+                "rating": 4,
+                "communication_rating": 5,
+                "punctuality_rating": 4,
+                "quality_rating": 3,
+                "comment": "Good communication and decent work",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["communication_rating"], 5)
+        self.assertEqual(response.data["punctuality_rating"], 4)
+        self.assertEqual(response.data["quality_rating"], 3)
+        self.assertEqual(response.data["rating"], 4)

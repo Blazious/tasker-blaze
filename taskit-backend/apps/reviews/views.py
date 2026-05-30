@@ -57,6 +57,9 @@ class SubmitReviewView(APIView):
                 reviewee=reviewee,
                 review_type=review_type,
                 rating=serializer.validated_data["rating"],
+                communication_rating=serializer.validated_data.get("communication_rating", serializer.validated_data["rating"]),
+                punctuality_rating=serializer.validated_data.get("punctuality_rating", serializer.validated_data["rating"]),
+                quality_rating=serializer.validated_data.get("quality_rating", serializer.validated_data["rating"]),
                 comment=serializer.validated_data["comment"],
             )
             review.full_clean()

@@ -15,6 +15,19 @@ def get_average_rating(user):
     return round(float(value), 2)
 
 
+def get_rating_breakdown(user):
+    values = Review.objects.filter(reviewee=user, is_visible=True).aggregate(
+        communication=Avg("communication_rating"),
+        punctuality=Avg("punctuality_rating"),
+        quality=Avg("quality_rating"),
+    )
+    return {
+        "communication": round(float(values["communication"] or 0), 2),
+        "punctuality": round(float(values["punctuality"] or 0), 2),
+        "quality": round(float(values["quality"] or 0), 2),
+    }
+
+
 def get_total_reviews(user):
     return Review.objects.filter(reviewee=user, is_visible=True).count()
 

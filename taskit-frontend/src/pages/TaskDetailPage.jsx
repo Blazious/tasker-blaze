@@ -38,6 +38,27 @@ function StatusBadge({ status }) {
   )
 }
 
+const reviewRatingFields = [
+  { key: 'communication_rating', label: 'Communication' },
+  { key: 'punctuality_rating', label: 'Punctuality' },
+  { key: 'quality_rating', label: 'Quality' },
+]
+
+function RatingInput({ label, value, onChange }) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-sm font-semibold text-text-dark">{label}</span>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((rating) => (
+          <button key={rating} type="button" onClick={() => onChange(rating)} aria-label={`${label}: ${rating} stars`}>
+            <Star size={24} className={rating <= value ? 'fill-secondary text-secondary' : 'text-slate-300'} />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function EscrowWorkflowCard({
   acceptedBid,
   checkPaymentMutation,
@@ -57,12 +78,18 @@ function EscrowWorkflowCard({
   const paymentReleased = task.payment_status === 'RELEASED' || task.status === 'COMPLETED'
   const canMarkComplete = isTaskerAssigned && fundsHeld && !taskerMarkedComplete && !paymentReleased
   const canApproveRelease = isClient && taskerMarkedComplete && !paymentReleased
-  const steps = [
-    { label: 'Funds Held', complete: fundsHeld, active: task.status === 'ASSIGNED' },
-    { label: 'Work Started', complete: workStarted, active: fundsHeld && !taskerMarkedComplete },
-    { label: 'Task Complete', complete: taskerMarkedComplete, active: fundsHeld && taskerMarkedComplete },
-    { label: 'Payment Released', complete: paymentReleased, active: task.status === 'COMPLETED' },
-  ]
+  const currentStepIndex = paymentReleased
+    ? 3
+    : taskerMarkedComplete
+      ? 2
+      : fundsHeld || workStarted
+        ? 1
+        : 0
+  const steps = ['Funds Held', 'Work Started', 'Task Complete', 'Payment Released'].map((label, index) => ({
+    label,
+    complete: paymentReleased ? index <= currentStepIndex : index < currentStepIndex,
+    active: !paymentReleased && index === currentStepIndex,
+  }))
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -86,7 +113,7 @@ function EscrowWorkflowCard({
         {steps.map((step, index) => (
           <div key={step.label} className="relative grid gap-2 pb-5 sm:pb-0">
             {index < steps.length - 1 && (
-              <span className={`absolute left-5 top-5 h-full w-0.5 sm:left-[calc(50%+20px)] sm:top-5 sm:h-0.5 sm:w-[calc(100%-40px)] ${steps[index + 1].complete ? 'bg-primary' : 'bg-slate-200'}`} />
+              <span className={`absolute left-5 top-5 h-full w-0.5 sm:left-[calc(50%+20px)] sm:top-5 sm:h-0.5 sm:w-[calc(100%-40px)] ${index < currentStepIndex ? 'bg-primary' : 'bg-slate-200'}`} />
             )}
             <div className="relative z-10 flex items-center gap-3 sm:flex-col sm:text-center">
               <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${
@@ -213,7 +240,13 @@ export default function TaskDetailPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const refreshToken = useAuthStore((state) => state.refreshToken)
   const [bidForm, setBidForm] = useState({ amount: '', message: '' })
-  const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' })
+  const [reviewForm, setReviewForm] = useState({
+    rating: 5,
+    communication_rating: 5,
+    punctuality_rating: 5,
+    quality_rating: 5,
+    comment: '',
+  })
   const [disputeReason, setDisputeReason] = useState('')
   const [disputeDetails, setDisputeDetails] = useState('')
   const [isDisputeOpen, setIsDisputeOpen] = useState(false)
@@ -424,7 +457,16 @@ export default function TaskDetailPage() {
   })
 
   const reviewMutation = useMutation({
-    mutationFn: () => submitReview(taskId, reviewForm),
+    mutationFn: () => {
+      const rating = Math.round(
+        (
+          reviewForm.communication_rating
+          + reviewForm.punctuality_rating
+          + reviewForm.quality_rating
+        ) / 3,
+      )
+      return submitReview(taskId, { ...reviewForm, rating })
+    },
     onSuccess: () => {
       toast.success('Review submitted')
       setReviewSubmitted(true)
@@ -655,11 +697,14 @@ export default function TaskDetailPage() {
           <p className="mt-1 text-sm text-text-muted">
             {isClient ? 'Share how the tasker handled the job.' : 'Share how the client handled the task.'}
           </p>
-          <div className="mt-4 flex gap-1">
-            {[1, 2, 3, 4, 5].map((rating) => (
-              <button key={rating} type="button" onClick={() => setReviewForm((current) => ({ ...current, rating }))} aria-label={`${rating} star rating`}>
-                <Star size={24} className={rating <= reviewForm.rating ? 'fill-secondary text-secondary' : 'text-slate-300'} />
-              </button>
+          <div className="mt-4 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            {reviewRatingFields.map((field) => (
+              <RatingInput
+                key={field.key}
+                label={field.label}
+                value={reviewForm[field.key]}
+                onChange={(rating) => setReviewForm((current) => ({ ...current, [field.key]: rating }))}
+              />
             ))}
           </div>
           <textarea value={reviewForm.comment} onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))} maxLength={500} rows={4} placeholder="Write a short review" className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2" />
@@ -725,7 +770,14 @@ export default function TaskDetailPage() {
                   <h3 className="font-semibold text-text-dark">Recent reviews</h3>
                   <div className="mt-2 grid gap-2">
                     {(taskerProfileQuery.data?.recent_reviews ?? []).slice(0, 3).map((review) => (
-                      <p key={review.id} className="rounded-md bg-slate-50 p-3 text-sm text-text-muted">{review.comment}</p>
+                      <div key={review.id} className="rounded-md bg-slate-50 p-3 text-sm text-text-muted">
+                        <div className="mb-2 flex flex-wrap gap-2 text-xs font-semibold text-text-dark">
+                          <span>Communication {review.communication_rating ?? review.rating}/5</span>
+                          <span>Punctuality {review.punctuality_rating ?? review.rating}/5</span>
+                          <span>Quality {review.quality_rating ?? review.rating}/5</span>
+                        </div>
+                        <p>{review.comment}</p>
+                      </div>
                     ))}
                   </div>
                 </div>

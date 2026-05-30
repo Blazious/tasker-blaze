@@ -139,6 +139,7 @@ EMAIL_VERIFICATION_ENABLED = config(
 ).lower() in {"1", "true", "yes", "on"}
 ADMIN_EMAIL = config("ADMIN_EMAIL", default="admin@taskit.co.ke")
 KYC_MOCK = config("KYC_MOCK", default="True").lower() in {"1", "true", "yes", "on"}
+KYC_OCR_PROVIDER = config("KYC_OCR_PROVIDER", default="mindee")
 KYC_FACE_MATCH_THRESHOLD = config("KYC_FACE_MATCH_THRESHOLD", default="75")
 KYC_HTTP_TIMEOUT = config("KYC_HTTP_TIMEOUT", default=30, cast=int)
 MINDEE_API_KEY = config("MINDEE_API_KEY", default="")

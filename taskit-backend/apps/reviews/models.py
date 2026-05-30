@@ -30,6 +30,27 @@ class Review(models.Model):
             MaxValueValidator(5),
         ]
     )
+    communication_rating = models.IntegerField(
+        default=5,
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(5),
+        ],
+    )
+    punctuality_rating = models.IntegerField(
+        default=5,
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(5),
+        ],
+    )
+    quality_rating = models.IntegerField(
+        default=5,
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(5),
+        ],
+    )
     comment = models.TextField(max_length=500)
     review_type = models.CharField(max_length=20, choices=ReviewType.choices)
     created_at = models.DateTimeField(auto_now_add=True)

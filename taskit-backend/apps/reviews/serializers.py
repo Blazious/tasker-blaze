@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from .badges import get_badges
 from .models import Review, UserReport
+from .utils import get_rating_breakdown
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -20,6 +21,9 @@ class ReviewSerializer(serializers.ModelSerializer):
             "reviewee",
             "reviewee_name",
             "rating",
+            "communication_rating",
+            "punctuality_rating",
+            "quality_rating",
             "comment",
             "review_type",
             "created_at",
@@ -43,6 +47,13 @@ class ReviewSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Comment is required.")
         return value
 
+    def validate(self, attrs):
+        rating_fields = ("communication_rating", "punctuality_rating", "quality_rating")
+        if any(field in attrs for field in rating_fields):
+            values = [attrs.get(field, attrs.get("rating", 5)) for field in rating_fields]
+            attrs["rating"] = round(sum(values) / len(values))
+        return attrs
+
 
 class PublicProfileSerializer(serializers.Serializer):
     full_name = serializers.CharField()
@@ -55,6 +66,7 @@ class PublicProfileSerializer(serializers.Serializer):
     availability_note = serializers.CharField()
     available_until = serializers.DateTimeField(allow_null=True)
     average_rating = serializers.FloatField()
+    rating_breakdown = serializers.SerializerMethodField()
     total_reviews = serializers.IntegerField()
     completed_tasks_count = serializers.IntegerField()
     badges = serializers.SerializerMethodField()
@@ -68,6 +80,9 @@ class PublicProfileSerializer(serializers.Serializer):
 
     def get_badges(self, obj):
         return get_badges(obj)
+
+    def get_rating_breakdown(self, obj):
+        return get_rating_breakdown(obj)
 
     def get_recent_reviews(self, obj):
         reviews = Review.objects.filter(reviewee=obj, is_visible=True).select_related(

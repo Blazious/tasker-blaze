@@ -125,6 +125,8 @@ class RefreshTokenSerializer(TokenRefreshSerializer):
 
 class KYCVerificationSerializer(serializers.ModelSerializer):
     prefill = serializers.SerializerMethodField()
+    face_match_confidence_label = serializers.SerializerMethodField()
+    verification_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = KYCVerification
@@ -147,6 +149,8 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
             "stamp_detected",
             "id_photo_detected",
             "face_match_confidence",
+            "face_match_confidence_label",
+            "verification_summary",
             "reviewer_notes",
             "submitted_at",
             "processed_at",
@@ -169,6 +173,8 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
             "stamp_detected",
             "id_photo_detected",
             "face_match_confidence",
+            "face_match_confidence_label",
+            "verification_summary",
             "reviewer_notes",
             "submitted_at",
             "processed_at",
@@ -187,6 +193,18 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
             "student_id": obj.extracted_student_id,
             "department": obj.extracted_department or obj.extracted_school or obj.extracted_degree,
             "degree": obj.extracted_degree,
+        }
+
+    def get_face_match_confidence_label(self, obj):
+        return obj.face_match_raw_response.get("confidence_label", "") if obj.face_match_raw_response else ""
+
+    def get_verification_summary(self, obj):
+        return {
+            "ocr_provider": obj.ocr_raw_response.get("provider", "mock") if obj.ocr_raw_response else "",
+            "has_identity_fields": bool(obj.extracted_full_name or obj.extracted_student_id),
+            "has_jkuat_evidence": obj.stamp_detected or "jkuat" in (obj.extracted_university_name or "").lower(),
+            "face_match": obj.face_match_raw_response.get("match") if obj.face_match_raw_response else None,
+            "ready_for_review": obj.status == KYCVerification.Status.PENDING_REVIEW,
         }
 
     def validate(self, attrs):

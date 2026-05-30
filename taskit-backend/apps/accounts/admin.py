@@ -101,6 +101,7 @@ class KYCVerificationAdmin(admin.ModelAdmin):
         "stamp_detected",
         "id_photo_detected",
         "face_match_confidence",
+        "face_match_label",
         "submitted_at",
     )
     list_filter = ("status", "stamp_detected", "id_photo_detected", "submitted_at")
@@ -131,3 +132,8 @@ class KYCVerificationAdmin(admin.ModelAdmin):
             obj.user.is_kyc_verified = obj.status == KYCVerification.Status.APPROVED
             obj.user.save(update_fields=["is_kyc_verified"])
         super().save_model(request, obj, form, change)
+
+    @admin.display(description="Face confidence")
+    def face_match_label(self, obj):
+        label = obj.face_match_raw_response.get("confidence_label", "") if obj.face_match_raw_response else ""
+        return label or "-"

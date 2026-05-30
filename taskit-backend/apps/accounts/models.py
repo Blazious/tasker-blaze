@@ -125,6 +125,7 @@ class KYCVerification(models.Model):
         NOT_STARTED = "NOT_STARTED", "Not Started"
         PENDING_REVIEW = "PENDING_REVIEW", "Pending Review"
         NEEDS_RETRY = "NEEDS_RETRY", "Needs Retry"
+        FACE_MISMATCH = "FACE_MISMATCH", "Face Mismatch"
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
 

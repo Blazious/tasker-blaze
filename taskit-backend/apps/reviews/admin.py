@@ -10,11 +10,14 @@ class ReviewAdmin(admin.ModelAdmin):
         "reviewer",
         "reviewee",
         "rating",
+        "communication_rating",
+        "punctuality_rating",
+        "quality_rating",
         "review_type",
         "is_visible",
         "created_at",
     )
-    list_filter = ("review_type", "rating", "is_visible", "created_at")
+    list_filter = ("review_type", "rating", "communication_rating", "punctuality_rating", "quality_rating", "is_visible", "created_at")
     search_fields = (
         "task__title",
         "reviewer__email",
