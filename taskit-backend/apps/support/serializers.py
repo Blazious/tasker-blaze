@@ -3,6 +3,15 @@ from rest_framework import serializers
 from .models import SupportConversation, SupportMessage, SupportTicket
 
 
+class SupportUserSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    is_verified = serializers.BooleanField(read_only=True)
+    is_kyc_verified = serializers.BooleanField(read_only=True)
+
+
 class SupportMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = SupportMessage
@@ -32,6 +41,35 @@ class SupportTicketSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+
+class AdminSupportTicketSerializer(serializers.ModelSerializer):
+    user = SupportUserSummarySerializer(read_only=True)
+    conversation_id = serializers.IntegerField(source="conversation.id", read_only=True)
+
+    class Meta:
+        model = SupportTicket
+        fields = (
+            "id",
+            "user",
+            "conversation_id",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "admin_notes",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "user",
+            "conversation_id",
+            "title",
+            "description",
+            "created_at",
+            "updated_at",
+        )
 
 
 class SupportChatRequestSerializer(serializers.Serializer):

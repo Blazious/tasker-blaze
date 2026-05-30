@@ -8,7 +8,8 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework import generics
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,8 +19,8 @@ from .billing import billing_summary, generate_invoice_for_month, track_platform
 from .econfirm import EconfirmClient
 from .escrow import flag_dispute, hold_funds, release_funds
 from .intasend import IntaSendClient, mark_invoice_payment_failed, mark_invoice_payment_paid
-from .models import DisputeNote, EscrowLedger, PlatformInvoice, PlatformInvoicePayment, Transaction
-from .serializers import DisputeCreateSerializer, TransactionSerializer
+from .models import DisputeNote, EscrowLedger, PlatformFeeUsage, PlatformInvoice, PlatformInvoicePayment, Transaction
+from .serializers import AdminPlatformInvoiceSerializer, DisputeCreateSerializer, TransactionSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -446,6 +447,48 @@ class PlatformBillingSummaryView(APIView):
         summary = billing_summary(request.user)
         summary["generated_invoice_id"] = invoice.id if invoice else None
         return Response(summary)
+
+
+class AdminPlatformInvoiceListView(generics.ListAPIView):
+    serializer_class = AdminPlatformInvoiceSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = (
+            PlatformInvoice.objects.select_related("tasker")
+            .prefetch_related("payments", "usages", "usages__task", "usages__transaction")
+        )
+        status_filter = self.request.query_params.get("status")
+        overdue_filter = self.request.query_params.get("overdue")
+
+        if status_filter and status_filter != "ALL":
+            queryset = queryset.filter(status=status_filter)
+        if overdue_filter == "true":
+            queryset = queryset.filter(
+                status=PlatformInvoice.Status.PENDING,
+                due_date__lt=timezone.now(),
+            )
+
+        return queryset
+
+
+class AdminPlatformInvoiceDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = AdminPlatformInvoiceSerializer
+    permission_classes = [IsAdminUser]
+    queryset = (
+        PlatformInvoice.objects.select_related("tasker")
+        .prefetch_related("payments", "usages", "usages__task", "usages__transaction")
+    )
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def perform_update(self, serializer):
+        invoice = serializer.save()
+        if invoice.status == PlatformInvoice.Status.WAIVED:
+            invoice.usages.update(status=PlatformFeeUsage.Status.WAIVED)
+        elif invoice.status == PlatformInvoice.Status.PENDING:
+            invoice.usages.update(status=PlatformFeeUsage.Status.INVOICED)
+        elif invoice.status == PlatformInvoice.Status.CANCELLED:
+            invoice.usages.update(status=PlatformFeeUsage.Status.TRACKED, invoice=None)
 
 
 class TestPlatformInvoiceView(APIView):

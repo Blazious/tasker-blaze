@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AdminSupportTicketDetailView,
+    AdminSupportTicketListView,
     MySupportConversationView,
     MySupportTicketsView,
     AdminOverviewView,
@@ -16,4 +18,6 @@ urlpatterns = [
     path("escalate/", SupportEscalationView.as_view(), name="support-escalate"),
     path("tickets/", MySupportTicketsView.as_view(), name="support-tickets"),
     path("admin/overview/", AdminOverviewView.as_view(), name="admin-overview"),
+    path("admin/tickets/", AdminSupportTicketListView.as_view(), name="admin-support-tickets"),
+    path("admin/tickets/<int:pk>/", AdminSupportTicketDetailView.as_view(), name="admin-support-ticket-detail"),
 ]

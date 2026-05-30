@@ -9,8 +9,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db.models import Sum
+from django.utils import timezone
+from rest_framework import generics
+from rest_framework.permissions import IsAdminUser
 
 from .serializers import (
+    AdminKYCVerificationSerializer,
     AvailabilitySerializer,
     KYCVerificationSerializer,
     LoginSerializer,
@@ -255,6 +259,33 @@ class KYCVerificationView(APIView):
             KYCVerificationSerializer(kyc).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class AdminKYCVerificationListView(generics.ListAPIView):
+    serializer_class = AdminKYCVerificationSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = KYCVerification.objects.select_related("user")
+        status_filter = self.request.query_params.get("status")
+
+        if status_filter and status_filter != "ALL":
+            queryset = queryset.filter(status=status_filter)
+
+        return queryset
+
+
+class AdminKYCVerificationDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = AdminKYCVerificationSerializer
+    permission_classes = [IsAdminUser]
+    queryset = KYCVerification.objects.select_related("user")
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def perform_update(self, serializer):
+        kyc = serializer.save(reviewed_at=timezone.now())
+        user = kyc.user
+        user.is_kyc_verified = kyc.status == KYCVerification.Status.APPROVED
+        user.save(update_fields=["is_kyc_verified"])
 
 
 class KYCPrefillProfileView(APIView):

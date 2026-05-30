@@ -3,19 +3,21 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import KYCVerification
-from apps.payments.models import DisputeNote, PlatformInvoice, Transaction
+from apps.payments.models import DisputeNote, PlatformFeeUsage, PlatformInvoice
 from apps.reviews.models import UserReport
 from apps.tasks.models import Bid, Task
 
 from .gemini import TaskitSupportBot
 from .models import SupportConversation, SupportMessage, SupportTicket
 from .serializers import (
+    AdminSupportTicketSerializer,
     SupportChatRequestSerializer,
     SupportConversationSerializer,
     SupportEscalationSerializer,
@@ -153,6 +155,30 @@ class MySupportTicketsView(generics.ListAPIView):
         return SupportTicket.objects.filter(user=self.request.user)
 
 
+class AdminSupportTicketListView(generics.ListAPIView):
+    serializer_class = AdminSupportTicketSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = SupportTicket.objects.select_related("user", "conversation")
+        status_filter = self.request.query_params.get("status")
+        priority_filter = self.request.query_params.get("priority")
+
+        if status_filter and status_filter != "ALL":
+            queryset = queryset.filter(status=status_filter)
+        if priority_filter and priority_filter != "ALL":
+            queryset = queryset.filter(priority=priority_filter)
+
+        return queryset
+
+
+class AdminSupportTicketDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = AdminSupportTicketSerializer
+    permission_classes = [IsAdminUser]
+    queryset = SupportTicket.objects.select_related("user", "conversation")
+    http_method_names = ["get", "patch", "head", "options"]
+
+
 class AdminOverviewView(APIView):
     permission_classes = [IsAdminUser]
 
@@ -164,12 +190,16 @@ class AdminOverviewView(APIView):
             PlatformInvoice.objects.filter(status=PlatformInvoice.Status.PENDING).aggregate(total=Sum("amount"))["total"]
             or 0
         )
-        released_total = (
-            Transaction.objects.filter(status=Transaction.Status.RELEASED).aggregate(total=Sum("total_charged"))["total"]
+        paid_invoice_total = (
+            PlatformInvoice.objects.filter(status=PlatformInvoice.Status.PAID).aggregate(total=Sum("amount"))["total"]
             or 0
         )
-        escrowed_total = (
-            Transaction.objects.filter(status=Transaction.Status.ESCROWED).aggregate(total=Sum("total_charged"))["total"]
+        waived_invoice_total = (
+            PlatformInvoice.objects.filter(status=PlatformInvoice.Status.WAIVED).aggregate(total=Sum("amount"))["total"]
+            or 0
+        )
+        tracked_fee_total = (
+            PlatformFeeUsage.objects.filter(status=PlatformFeeUsage.Status.TRACKED).aggregate(total=Sum("fee_amount"))["total"]
             or 0
         )
 
@@ -199,9 +229,14 @@ class AdminOverviewView(APIView):
                 },
                 "billing": {
                     "pending_invoices": PlatformInvoice.objects.filter(status=PlatformInvoice.Status.PENDING).count(),
+                    "overdue_invoices": PlatformInvoice.objects.filter(
+                        status=PlatformInvoice.Status.PENDING,
+                        due_date__lt=timezone.now(),
+                    ).count(),
                     "pending_invoice_total": str(pending_invoice_total),
-                    "escrowed_total": str(escrowed_total),
-                    "released_total": str(released_total),
+                    "paid_invoice_total": str(paid_invoice_total),
+                    "waived_invoice_total": str(waived_invoice_total),
+                    "tracked_fee_total": str(tracked_fee_total),
                 },
                 "admin_email": getattr(settings, "ADMIN_EMAIL", ""),
             }

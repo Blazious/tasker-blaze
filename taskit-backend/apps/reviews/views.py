@@ -3,14 +3,14 @@ from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.tasks.models import Task
 
 from .models import Review, UserReport
-from .serializers import PublicProfileSerializer, ReviewSerializer, UserReportSerializer
+from .serializers import AdminUserReportSerializer, PublicProfileSerializer, ReviewSerializer, UserReportSerializer
 from .utils import reveal_reviews_if_pair_complete
 
 User = get_user_model()
@@ -130,3 +130,32 @@ class PublicProfileView(APIView):
     def get(self, request, user_id):
         user = get_object_or_404(User, pk=user_id)
         return Response(PublicProfileSerializer(user).data)
+
+
+class AdminUserReportListView(generics.ListAPIView):
+    serializer_class = AdminUserReportSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = UserReport.objects.select_related("reporter", "reported_user", "task")
+        status_filter = self.request.query_params.get("status")
+        reason_filter = self.request.query_params.get("reason")
+        visibility_filter = self.request.query_params.get("visibility")
+
+        if status_filter and status_filter != "ALL":
+            queryset = queryset.filter(status=status_filter)
+        if reason_filter and reason_filter != "ALL":
+            queryset = queryset.filter(reason=reason_filter)
+        if visibility_filter == "PUBLIC":
+            queryset = queryset.filter(is_public=True)
+        elif visibility_filter == "PRIVATE":
+            queryset = queryset.filter(is_public=False)
+
+        return queryset
+
+
+class AdminUserReportDetailView(generics.RetrieveUpdateAPIView):
+    serializer_class = AdminUserReportSerializer
+    permission_classes = [IsAdminUser]
+    queryset = UserReport.objects.select_related("reporter", "reported_user", "task")
+    http_method_names = ["get", "patch", "head", "options"]

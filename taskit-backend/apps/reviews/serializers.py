@@ -155,3 +155,47 @@ class UserReportSerializer(serializers.ModelSerializer):
         if len(value.strip()) < 10:
             raise serializers.ValidationError("Please add at least 10 characters of detail.")
         return value.strip()
+
+
+class AdminReportUserSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    is_verified = serializers.BooleanField(read_only=True)
+    is_kyc_verified = serializers.BooleanField(read_only=True)
+    is_tasker_active = serializers.BooleanField(read_only=True)
+
+
+class AdminUserReportSerializer(serializers.ModelSerializer):
+    reporter = AdminReportUserSummarySerializer(read_only=True)
+    reported_user = AdminReportUserSummarySerializer(read_only=True)
+    task_title = serializers.CharField(source="task.title", read_only=True)
+
+    class Meta:
+        model = UserReport
+        fields = (
+            "id",
+            "reporter",
+            "reported_user",
+            "task",
+            "task_title",
+            "reason",
+            "details",
+            "status",
+            "is_public",
+            "admin_notes",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "reporter",
+            "reported_user",
+            "task",
+            "task_title",
+            "reason",
+            "details",
+            "created_at",
+            "updated_at",
+        )

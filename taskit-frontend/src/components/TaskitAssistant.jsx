@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, Loader2, MessageCircle, Send, X } from 'lucide-react'
+import { Bot, Loader2, Mail, MessageCircle, Send, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getSupportConversation, sendSupportMessage } from '../api/support.js'
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from '../constants/support.js'
 import { useAuthStore } from '../store/authStore.js'
 import { getApiErrorMessage } from '../utils/apiError.js'
 
@@ -86,7 +87,11 @@ export default function TaskitAssistant() {
           </header>
 
           <div className="border-b border-slate-100 bg-emerald-50 px-4 py-3 text-xs leading-5 text-primary">
-            Ask about tasks, bids, KYC, chat, payments, reviews, safety, or reports. If I cannot solve it, I will raise an admin ticket.
+            <p>Ask about tasks, bids, KYC, chat, payments, reviews, safety, or reports. If I cannot solve it, I will raise an admin ticket.</p>
+            <a href={SUPPORT_MAILTO} className="mt-2 inline-flex items-center gap-1.5 font-semibold underline-offset-2 hover:underline">
+              <Mail size={14} />
+              Email admin support: {SUPPORT_EMAIL}
+            </a>
           </div>
 
           <div className="flex-1 overflow-y-auto bg-surface px-4 py-4">

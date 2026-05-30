@@ -142,6 +142,90 @@ class KYCVerificationTests(TestCase):
         self.assertEqual(normalize_jkuat_college("CoHRED"), "College of Human Resource Development")
         self.assertEqual(normalize_jkuat_college("COPAS"), "College of Pure and Applied Sciences")
 
+    def test_admin_can_list_kyc_submissions(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        KYCVerification.objects.create(
+            user=self.user,
+            id_front_image=tiny_gif("front.gif"),
+            status=KYCVerification.Status.PENDING_REVIEW,
+            extracted_full_name="KYC User",
+            extracted_student_id="SCT211-0001/2024",
+            stamp_detected=True,
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.get("/api/v1/auth/admin/kyc/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["user"]["email"], self.user.email)
+        self.assertEqual(response.data[0]["status"], KYCVerification.Status.PENDING_REVIEW)
+
+    def test_admin_approval_marks_user_kyc_verified(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        kyc = KYCVerification.objects.create(
+            user=self.user,
+            id_front_image=tiny_gif("front.gif"),
+            status=KYCVerification.Status.PENDING_REVIEW,
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.patch(
+            f"/api/v1/auth/admin/kyc/{kyc.id}/",
+            {
+                "status": KYCVerification.Status.APPROVED,
+                "reviewer_notes": "Student ID matches profile.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        kyc.refresh_from_db()
+        self.user.refresh_from_db()
+        self.assertEqual(kyc.status, KYCVerification.Status.APPROVED)
+        self.assertEqual(kyc.reviewer_notes, "Student ID matches profile.")
+        self.assertIsNotNone(kyc.reviewed_at)
+        self.assertTrue(self.user.is_kyc_verified)
+
+    def test_admin_rejection_marks_user_kyc_unverified(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        self.user.is_kyc_verified = True
+        self.user.save(update_fields=["is_kyc_verified"])
+        kyc = KYCVerification.objects.create(
+            user=self.user,
+            id_front_image=tiny_gif("front.gif"),
+            status=KYCVerification.Status.APPROVED,
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.patch(
+            f"/api/v1/auth/admin/kyc/{kyc.id}/",
+            {"status": KYCVerification.Status.REJECTED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_kyc_verified)
+
 
 class StudentEmailAccessTests(TestCase):
     def test_rejects_non_jkuat_student_domains(self):

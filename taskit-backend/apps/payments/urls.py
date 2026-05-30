@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AdminPlatformInvoiceDetailView,
+    AdminPlatformInvoiceListView,
     DisputePaymentView,
     EconfirmCallbackView,
     ConfirmEscrowFundedView,
@@ -31,6 +33,8 @@ urlpatterns = [
     path("my-earnings/", MyEarningsView.as_view(), name="my-earnings"),
     path("my-spending/", MySpendingView.as_view(), name="my-spending"),
     path("platform-billing/", PlatformBillingSummaryView.as_view(), name="platform-billing"),
+    path("admin/platform-invoices/", AdminPlatformInvoiceListView.as_view(), name="admin-platform-invoices"),
+    path("admin/platform-invoices/<int:pk>/", AdminPlatformInvoiceDetailView.as_view(), name="admin-platform-invoice-detail"),
     path("platform-billing/test-invoice/", TestPlatformInvoiceView.as_view(), name="test-platform-invoice"),
     path("platform-invoices/<int:invoice_id>/pay/", PayPlatformInvoiceView.as_view(), name="pay-platform-invoice"),
     path("platform-invoices/<int:invoice_id>/status/", PlatformInvoicePaymentStatusView.as_view(), name="platform-invoice-payment-status"),

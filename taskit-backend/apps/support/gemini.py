@@ -91,9 +91,16 @@ User question:
 
     def fallback_answer(self, message):
         lower = message.lower()
+        if any(word in lower for word in ["email", "contact", "admin", "human", "support email", "reach you", "reach admin"]):
+            return {
+                "answer": "You can contact TaskiT admin support directly at admintaskit@gmail.com. In the Help assistant, click the support email link and it will open your email app with a new message ready to send.",
+                "needs_escalation": False,
+                "ticket_title": "Direct support contact request",
+                "priority": "NORMAL",
+            }
         if any(word in lower for word in ["harass", "unsafe", "threat", "safety", "danger", "dhulumu", "hatari"]):
             return {
-                "answer": "This sounds safety-related. Use SOS if you are in immediate danger, move to a public place if possible, and I will raise this for admin review.",
+                "answer": "This sounds safety-related. Use SOS if you are in immediate danger, move to a public place if possible, and I will raise this for admin review. You can also email TaskiT admin support at admintaskit@gmail.com.",
                 "needs_escalation": True,
                 "ticket_title": "Safety concern from support bot",
                 "priority": "URGENT",
@@ -167,7 +174,7 @@ User question:
                 "priority": "LOW",
             }
         return {
-            "answer": "I can help with posting tasks, bidding, eConfirm escrow payments, post-paid billing, KYC, chat, reviews, reports, availability, scheduled tasks, House Hunting, and safety features. Ask me with a little more detail and I will guide you.",
+            "answer": "I can help with posting tasks, bidding, eConfirm escrow payments, post-paid billing, KYC, chat, reviews, reports, availability, scheduled tasks, House Hunting, and safety features. Ask me with a little more detail and I will guide you. For direct admin support, email admintaskit@gmail.com.",
             "needs_escalation": False,
             "ticket_title": "General support request",
             "priority": "NORMAL",

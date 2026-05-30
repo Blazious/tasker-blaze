@@ -220,3 +220,91 @@ class KYCVerificationSerializer(serializers.ModelSerializer):
             if not attrs.get("id_front_image"):
                 raise serializers.ValidationError({"id_front_image": "Front of student ID is required."})
         return attrs
+
+
+class AdminKYCUserSummarySerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    student_id = serializers.CharField(read_only=True)
+    department = serializers.CharField(read_only=True)
+    is_verified = serializers.BooleanField(read_only=True)
+    is_kyc_verified = serializers.BooleanField(read_only=True)
+
+
+class AdminKYCVerificationSerializer(serializers.ModelSerializer):
+    user = AdminKYCUserSummarySerializer(read_only=True)
+    face_match_confidence_label = serializers.SerializerMethodField()
+    verification_summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KYCVerification
+        fields = (
+            "id",
+            "user",
+            "status",
+            "id_front_image",
+            "id_back_image",
+            "live_face_image",
+            "extracted_full_name",
+            "extracted_student_id",
+            "extracted_date_of_birth",
+            "extracted_issue_date",
+            "extracted_expiration_date",
+            "extracted_university_name",
+            "extracted_department",
+            "extracted_school",
+            "extracted_degree",
+            "extracted_validity_period",
+            "stamp_detected",
+            "id_photo_detected",
+            "face_match_confidence",
+            "face_match_confidence_label",
+            "verification_summary",
+            "reviewer_notes",
+            "submitted_at",
+            "processed_at",
+            "reviewed_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "user",
+            "id_front_image",
+            "id_back_image",
+            "live_face_image",
+            "extracted_full_name",
+            "extracted_student_id",
+            "extracted_date_of_birth",
+            "extracted_issue_date",
+            "extracted_expiration_date",
+            "extracted_university_name",
+            "extracted_department",
+            "extracted_school",
+            "extracted_degree",
+            "extracted_validity_period",
+            "stamp_detected",
+            "id_photo_detected",
+            "face_match_confidence",
+            "face_match_confidence_label",
+            "verification_summary",
+            "submitted_at",
+            "processed_at",
+            "reviewed_at",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_face_match_confidence_label(self, obj):
+        return obj.face_match_raw_response.get("confidence_label", "") if obj.face_match_raw_response else ""
+
+    def get_verification_summary(self, obj):
+        return {
+            "ocr_provider": obj.ocr_raw_response.get("provider", "mock") if obj.ocr_raw_response else "",
+            "has_identity_fields": bool(obj.extracted_full_name or obj.extracted_student_id),
+            "has_jkuat_evidence": obj.stamp_detected or "jkuat" in (obj.extracted_university_name or "").lower(),
+            "face_match": obj.face_match_raw_response.get("match") if obj.face_match_raw_response else None,
+            "ready_for_review": obj.status == KYCVerification.Status.PENDING_REVIEW,
+        }

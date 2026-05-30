@@ -4,6 +4,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     AccountsHealthView,
     ActivateTaskerView,
+    AdminKYCVerificationDetailView,
+    AdminKYCVerificationListView,
     AvailabilityView,
     AvailableTaskersView,
     KYCPrefillProfileView,
@@ -30,4 +32,6 @@ urlpatterns = [
     path("available-taskers/", AvailableTaskersView.as_view(), name="available-taskers"),
     path("kyc/", KYCVerificationView.as_view(), name="kyc-verification"),
     path("kyc/prefill-profile/", KYCPrefillProfileView.as_view(), name="kyc-prefill-profile"),
+    path("admin/kyc/", AdminKYCVerificationListView.as_view(), name="admin-kyc-list"),
+    path("admin/kyc/<int:pk>/", AdminKYCVerificationDetailView.as_view(), name="admin-kyc-detail"),
 ]

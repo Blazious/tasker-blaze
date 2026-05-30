@@ -254,3 +254,93 @@ class PaymentTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
+
+    def test_admin_can_list_platform_invoices(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        PlatformInvoice.objects.create(
+            tasker=self.tasker,
+            billing_month=timezone.now().date().replace(day=1),
+            amount=Decimal("20.00"),
+            due_date=timezone.now() + timedelta(days=3),
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.get("/api/v1/payments/admin/platform-invoices/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["tasker"]["email"], self.tasker.email)
+        self.assertEqual(response.data[0]["amount"], "20.00")
+
+    def test_admin_can_waive_platform_invoice_and_usage(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        transaction = self.create_transaction(status=Transaction.Status.RELEASED)
+        invoice = PlatformInvoice.objects.create(
+            tasker=self.tasker,
+            billing_month=timezone.now().date().replace(day=1),
+            amount=Decimal("20.00"),
+            due_date=timezone.now() + timedelta(days=3),
+        )
+        usage = PlatformFeeUsage.objects.create(
+            tasker=self.tasker,
+            transaction=transaction,
+            task=self.task,
+            task_amount=Decimal("200.00"),
+            fee_amount=Decimal("20.00"),
+            billing_month=invoice.billing_month,
+            status=PlatformFeeUsage.Status.INVOICED,
+            invoice=invoice,
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.patch(
+            f"/api/v1/payments/admin/platform-invoices/{invoice.id}/",
+            {
+                "status": PlatformInvoice.Status.WAIVED,
+                "notes": "Waived as launch-period goodwill.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        invoice.refresh_from_db()
+        usage.refresh_from_db()
+        self.assertEqual(invoice.status, PlatformInvoice.Status.WAIVED)
+        self.assertEqual(invoice.notes, "Waived as launch-period goodwill.")
+        self.assertEqual(usage.status, PlatformFeeUsage.Status.WAIVED)
+
+    def test_admin_cannot_manually_mark_platform_invoice_paid(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        invoice = PlatformInvoice.objects.create(
+            tasker=self.tasker,
+            billing_month=timezone.now().date().replace(day=1),
+            amount=Decimal("20.00"),
+            due_date=timezone.now() + timedelta(days=3),
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.patch(
+            f"/api/v1/payments/admin/platform-invoices/{invoice.id}/",
+            {"status": PlatformInvoice.Status.PAID},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)

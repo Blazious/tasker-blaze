@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 from apps.tasks.models import Task, TaskCategory
 
 from .badges import get_badges
-from .models import Review
+from .models import Review, UserReport
 
 
 class ReviewTestCase(TestCase):
@@ -156,3 +156,60 @@ class ReviewTestCase(TestCase):
         self.assertEqual(response.data["punctuality_rating"], 4)
         self.assertEqual(response.data["quality_rating"], 3)
         self.assertEqual(response.data["rating"], 4)
+
+    def test_admin_can_list_user_reports(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        UserReport.objects.create(
+            reporter=self.client_user,
+            reported_user=self.tasker,
+            task=self.task,
+            reason=UserReport.Reason.NO_SHOW,
+            details="Tasker did not arrive at the agreed handoff point.",
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.get("/api/v1/reviews/admin/reports/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["reported_user"]["email"], self.tasker.email)
+        self.assertEqual(response.data[0]["reason"], UserReport.Reason.NO_SHOW)
+
+    def test_admin_can_update_user_report_moderation_fields(self):
+        admin = get_user_model().objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        report = UserReport.objects.create(
+            reporter=self.client_user,
+            reported_user=self.tasker,
+            task=self.task,
+            reason=UserReport.Reason.SAFETY_CONCERN,
+            details="The meetup felt unsafe and needs admin review.",
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.patch(
+            f"/api/v1/reviews/admin/reports/{report.id}/",
+            {
+                "status": UserReport.Status.REVIEWING,
+                "is_public": True,
+                "admin_notes": "Flagged for follow-up before publishing more detail.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        report.refresh_from_db()
+        self.assertEqual(report.status, UserReport.Status.REVIEWING)
+        self.assertTrue(report.is_public)
+        self.assertEqual(report.admin_notes, "Flagged for follow-up before publishing more detail.")
