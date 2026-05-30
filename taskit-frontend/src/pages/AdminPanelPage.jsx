@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { AlertTriangle, Banknote, CheckCircle2, ClipboardList, Flag, Loader2, ShieldCheck, UsersRound } from 'lucide-react'
+import { AlertTriangle, Banknote, CheckCircle2, ClipboardList, Flag, Loader2, MessageCircle, ShieldCheck, UsersRound } from 'lucide-react'
 import {
   getAdminOverview,
   getAdminKycSubmissions,
@@ -40,6 +40,13 @@ const reportReasonOptions = ['ALL', 'HARASSMENT', 'SAFETY_CONCERN', 'NO_SHOW', '
 const visibilityOptions = ['ALL', 'PUBLIC', 'PRIVATE']
 const kycStatusOptions = ['ALL', 'PENDING_REVIEW', 'NEEDS_RETRY', 'FACE_MISMATCH', 'APPROVED', 'REJECTED']
 const invoiceStatusOptions = ['ALL', 'PENDING', 'PAID', 'WAIVED', 'CANCELLED']
+const adminTabs = [
+  { id: 'overview', label: 'Overview', Icon: ClipboardList },
+  { id: 'support', label: 'Support', Icon: MessageCircle },
+  { id: 'reports', label: 'Reports', Icon: Flag },
+  { id: 'kyc', label: 'KYC', Icon: ShieldCheck },
+  { id: 'billing', label: 'Billing', Icon: Banknote },
+]
 
 function TicketBadge({ children, tone = 'slate' }) {
   const tones = {
@@ -582,6 +589,7 @@ function SupportQueue({ enabled }) {
 export default function AdminPanelPage() {
   const user = useAuthStore((state) => state.user)
   const isAdmin = Boolean(user?.is_staff || user?.is_superuser)
+  const [activeTab, setActiveTab] = useState('overview')
   const overviewQuery = useQuery({
     queryKey: ['admin-overview'],
     queryFn: getAdminOverview,
@@ -614,56 +622,81 @@ export default function AdminPanelPage() {
 
   return (
     <section className="grid gap-6">
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
-          <ShieldCheck size={16} />
-          Admin operations
-        </p>
-        <h1 className="mt-2 text-3xl font-black text-primary">TaskiT Admin Panel</h1>
-        <p className="mt-2 text-sm text-text-muted">Operational overview for support, trust, billing, users, and platform activity.</p>
-        {overview?.admin_email && <p className="mt-3 text-sm font-semibold text-text-dark">Admin inbox: {overview.admin_email}</p>}
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Total Users" value={overview.users.total} note={`${overview.users.verified_email} email verified`} Icon={UsersRound} />
-        <MetricCard title="KYC Verified" value={overview.users.kyc_verified} note={`${overview.ops.kyc_pending_review} pending review`} Icon={CheckCircle2} />
-        <MetricCard title="Open Support" value={overview.ops.support_tickets_open} note={`${overview.ops.user_reports_open} user reports open`} Icon={ClipboardList} />
-        <MetricCard title="Payment Disputes" value={overview.ops.payment_disputes} note={`${overview.tasks.disputed} disputed tasks`} Icon={AlertTriangle} />
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-bold text-text-dark">Task Activity</h2>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-text-muted">Open</dt><dd className="font-bold text-text-dark">{overview.tasks.open}</dd></div>
-            <div><dt className="text-text-muted">Assigned</dt><dd className="font-bold text-text-dark">{overview.tasks.assigned}</dd></div>
-            <div><dt className="text-text-muted">In progress</dt><dd className="font-bold text-text-dark">{overview.tasks.in_progress}</dd></div>
-            <div><dt className="text-text-muted">Completed</dt><dd className="font-bold text-text-dark">{overview.tasks.completed}</dd></div>
-            <div><dt className="text-text-muted">Bids</dt><dd className="font-bold text-text-dark">{overview.tasks.bids}</dd></div>
-            <div><dt className="text-text-muted">Active taskers</dt><dd className="font-bold text-text-dark">{overview.users.taskers}</dd></div>
-          </dl>
-        </div>
-
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="inline-flex items-center gap-2 text-xl font-bold text-text-dark">
-            <Banknote size={20} />
-            Billing Snapshot
-          </h2>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <div><dt className="text-text-muted">Pending invoices</dt><dd className="font-bold text-text-dark">{overview.billing.pending_invoices}</dd></div>
-            <div><dt className="text-text-muted">Overdue invoices</dt><dd className="font-bold text-text-dark">{overview.billing.overdue_invoices}</dd></div>
-            <div><dt className="text-text-muted">Pending invoice total</dt><dd className="font-bold text-text-dark">KES {overview.billing.pending_invoice_total}</dd></div>
-            <div><dt className="text-text-muted">Paid platform total</dt><dd className="font-bold text-text-dark">KES {overview.billing.paid_invoice_total}</dd></div>
-            <div><dt className="text-text-muted">Waived platform total</dt><dd className="font-bold text-text-dark">KES {overview.billing.waived_invoice_total}</dd></div>
-            <div><dt className="text-text-muted">Uninvoiced tracked fees</dt><dd className="font-bold text-text-dark">KES {overview.billing.tracked_fee_total}</dd></div>
-          </dl>
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
+              <ShieldCheck size={16} />
+              Admin operations
+            </p>
+            <h1 className="mt-2 text-3xl font-black text-primary">TaskiT Admin Panel</h1>
+            <p className="mt-2 text-sm text-text-muted">Operational overview for support, trust, billing, users, and platform activity.</p>
+            {overview?.admin_email && <p className="mt-3 text-sm font-semibold text-text-dark">Admin inbox: {overview.admin_email}</p>}
+          </div>
+          <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-slate-50 p-1">
+            {adminTabs.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold ${
+                  activeTab === id
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-text-muted hover:bg-white hover:text-text-dark'
+                }`}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <PlatformBillingQueue enabled={isAdmin} />
-      <SupportQueue enabled={isAdmin} />
-      <ModerationQueue enabled={isAdmin} />
-      <KycReviewQueue enabled={isAdmin} />
+      {activeTab === 'overview' && (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard title="Total Users" value={overview.users.total} note={`${overview.users.verified_email} email verified`} Icon={UsersRound} />
+            <MetricCard title="KYC Verified" value={overview.users.kyc_verified} note={`${overview.ops.kyc_pending_review} pending review`} Icon={CheckCircle2} />
+            <MetricCard title="Open Support" value={overview.ops.support_tickets_open} note={`${overview.ops.user_reports_open} user reports open`} Icon={ClipboardList} />
+            <MetricCard title="Payment Disputes" value={overview.ops.payment_disputes} note={`${overview.tasks.disputed} disputed tasks`} Icon={AlertTriangle} />
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-xl font-bold text-text-dark">Task Activity</h2>
+              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <div><dt className="text-text-muted">Open</dt><dd className="font-bold text-text-dark">{overview.tasks.open}</dd></div>
+                <div><dt className="text-text-muted">Assigned</dt><dd className="font-bold text-text-dark">{overview.tasks.assigned}</dd></div>
+                <div><dt className="text-text-muted">In progress</dt><dd className="font-bold text-text-dark">{overview.tasks.in_progress}</dd></div>
+                <div><dt className="text-text-muted">Completed</dt><dd className="font-bold text-text-dark">{overview.tasks.completed}</dd></div>
+                <div><dt className="text-text-muted">Bids</dt><dd className="font-bold text-text-dark">{overview.tasks.bids}</dd></div>
+                <div><dt className="text-text-muted">Active taskers</dt><dd className="font-bold text-text-dark">{overview.users.taskers}</dd></div>
+              </dl>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="inline-flex items-center gap-2 text-xl font-bold text-text-dark">
+                <Banknote size={20} />
+                Billing Snapshot
+              </h2>
+              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <div><dt className="text-text-muted">Pending invoices</dt><dd className="font-bold text-text-dark">{overview.billing.pending_invoices}</dd></div>
+                <div><dt className="text-text-muted">Overdue invoices</dt><dd className="font-bold text-text-dark">{overview.billing.overdue_invoices}</dd></div>
+                <div><dt className="text-text-muted">Pending invoice total</dt><dd className="font-bold text-text-dark">KES {overview.billing.pending_invoice_total}</dd></div>
+                <div><dt className="text-text-muted">Paid platform total</dt><dd className="font-bold text-text-dark">KES {overview.billing.paid_invoice_total}</dd></div>
+                <div><dt className="text-text-muted">Waived platform total</dt><dd className="font-bold text-text-dark">KES {overview.billing.waived_invoice_total}</dd></div>
+                <div><dt className="text-text-muted">Uninvoiced tracked fees</dt><dd className="font-bold text-text-dark">KES {overview.billing.tracked_fee_total}</dd></div>
+              </dl>
+            </div>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'billing' && <PlatformBillingQueue enabled={isAdmin && activeTab === 'billing'} />}
+      {activeTab === 'support' && <SupportQueue enabled={isAdmin && activeTab === 'support'} />}
+      {activeTab === 'reports' && <ModerationQueue enabled={isAdmin && activeTab === 'reports'} />}
+      {activeTab === 'kyc' && <KycReviewQueue enabled={isAdmin && activeTab === 'kyc'} />}
     </section>
   )
 }
