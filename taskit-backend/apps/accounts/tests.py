@@ -111,3 +111,31 @@ class KYCVerificationTests(TestCase):
         self.assertEqual(response.data["face_match_confidence"], "88.00")
         self.assertEqual(response.data["face_match_confidence_label"], "High")
         self.assertTrue(response.data["verification_summary"]["face_match"])
+
+    @override_settings(KYC_MOCK=False, MINDEE_API_KEY="test-key", MINDEE_MODEL_ID="test-model")
+    @patch("apps.accounts.kyc.run_mindee_model_ocr")
+    def test_mindee_model_id_path_is_used_when_configured(self, mock_model_ocr):
+        mock_model_ocr.return_value = {
+            "full_name": "KYC User",
+            "student_id": "SCT211-0001/2024",
+            "department": "Computer Science",
+            "school": "",
+            "degree": "",
+            "stamp_detected": True,
+            "id_photo_detected": True,
+            "raw": {"provider": "mindee_model"},
+        }
+
+        response = self.api_client.post(
+            "/api/v1/auth/kyc/",
+            {
+                "id_front_image": tiny_gif("front.gif"),
+                "id_back_image": tiny_gif("back.gif"),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        mock_model_ocr.assert_called_once()
+        self.assertEqual(response.data["status"], KYCVerification.Status.PENDING_REVIEW)
+        self.assertEqual(response.data["verification_summary"]["ocr_provider"], "mindee_model")

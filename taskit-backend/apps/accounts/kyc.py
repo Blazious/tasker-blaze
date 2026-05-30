@@ -1,6 +1,8 @@
 import logging
 import re
+import tempfile
 from decimal import Decimal
+from pathlib import Path
 
 import requests
 from django.conf import settings
@@ -85,6 +87,23 @@ def _first_present(data, *keys):
     return ""
 
 
+def _field_value(field):
+    if field is None:
+        return ""
+    if isinstance(field, dict):
+        return field.get("value") or field.get("raw_value") or field.get("content") or ""
+    value = getattr(field, "value", None)
+    if value is not None:
+        return value
+    raw_value = getattr(field, "raw_value", None)
+    if raw_value is not None:
+        return raw_value
+    content = getattr(field, "content", None)
+    if content is not None:
+        return content
+    return str(field) if field else ""
+
+
 def _has_object_detection(data, *keys):
     for key in keys:
         value = data.get(key)
@@ -96,6 +115,67 @@ def _has_object_detection(data, *keys):
         if value:
             return True
     return False
+
+
+def _mindee_response_to_dict(response):
+    if hasattr(response, "model_dump"):
+        return response.model_dump(mode="json")
+    if hasattr(response, "dict"):
+        return response.dict()
+    return {"repr": repr(response)}
+
+
+def _extract_model_fields(response):
+    inference = getattr(response, "inference", None)
+    result = getattr(inference, "result", None)
+    fields = getattr(result, "fields", None)
+    if fields is None and isinstance(response, dict):
+        fields = (
+            response.get("inference", {})
+            .get("result", {})
+            .get("fields", {})
+        )
+    return fields or {}
+
+
+def run_mindee_model_ocr(kyc, api_key, model_id):
+    try:
+        from mindee import ClientV2, InferenceParameters, InferenceResponse, PathInput
+    except ImportError as exc:
+        raise ValueError("Mindee model OCR requires the mindee Python package.") from exc
+
+    with tempfile.NamedTemporaryFile(suffix=Path(kyc.id_front_image.name).suffix or ".jpg") as front_tmp:
+        with kyc.id_front_image.open("rb") as front_file:
+            front_tmp.write(front_file.read())
+        front_tmp.flush()
+
+        client = ClientV2(api_key)
+        params = InferenceParameters(model_id=model_id, raw_text=True, confidence=True)
+        response = client.enqueue_and_get_result(
+            InferenceResponse,
+            PathInput(front_tmp.name),
+            params,
+        )
+
+    raw = _mindee_response_to_dict(response)
+    fields = _extract_model_fields(response)
+    parsed_text = _parse_student_id_text(str(raw))
+
+    return {
+        "full_name": _field_value(fields.get("student_name") or fields.get("full_name") or fields.get("name")) or parsed_text["full_name"],
+        "student_id": _field_value(fields.get("student_id") or fields.get("registration_number") or fields.get("reg_number")) or parsed_text["student_id"],
+        "date_of_birth": _field_value(fields.get("date_of_birth") or fields.get("dob")),
+        "issue_date": _field_value(fields.get("issue_date") or fields.get("issued_date")),
+        "expiration_date": _field_value(fields.get("expiration_date") or fields.get("expiry_date") or fields.get("expiry")),
+        "university_name": _field_value(fields.get("university_name") or fields.get("institution_name")) or parsed_text["university_name"],
+        "department": _field_value(fields.get("department")) or parsed_text["department"],
+        "school": _field_value(fields.get("school") or fields.get("faculty")) or parsed_text["school"],
+        "degree": _field_value(fields.get("degree") or fields.get("program") or fields.get("course")) or parsed_text["degree"],
+        "validity_period": _field_value(fields.get("validity_period")),
+        "stamp_detected": bool(re.search(r"\b(jkuat|jomo kenyatta university|registrar|official stamp)\b", str(raw), re.IGNORECASE)),
+        "id_photo_detected": True,
+        "raw": {"provider": "mindee_model", "model_id": model_id, "response": raw},
+    }
 
 
 def _read_image_bytes(field_file):
@@ -176,9 +256,12 @@ def run_mindee_ocr(kyc):
 
     provider = str(getattr(settings, "KYC_OCR_PROVIDER", "mindee")).lower()
     api_key = getattr(settings, "MINDEE_API_KEY", "")
+    model_id = getattr(settings, "MINDEE_MODEL_ID", "")
     endpoint = getattr(settings, "MINDEE_ENDPOINT_URL", "")
     if provider in {"local", "easyocr"}:
         return run_local_ocr(kyc)
+    if api_key and model_id:
+        return run_mindee_model_ocr(kyc, api_key, model_id)
     if not api_key or not endpoint:
         return run_local_ocr(kyc)
 
