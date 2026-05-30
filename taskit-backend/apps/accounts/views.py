@@ -5,6 +5,7 @@ from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -165,6 +166,8 @@ class ActivateTaskerView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        if request.user.is_staff or request.user.is_superuser:
+            raise PermissionDenied("Admin accounts cannot activate tasker mode.")
         request.user.is_tasker_active = True
         if request.user.availability_status == User.AvailabilityStatus.OFFLINE:
             request.user.availability_status = User.AvailabilityStatus.AVAILABLE

@@ -303,6 +303,22 @@ class StudentEmailAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    @override_settings(ADMIN_EMAIL="admintaskit@gmail.com")
+    def test_admin_cannot_activate_tasker_mode(self):
+        User = get_user_model()
+        admin = User.objects.create_superuser(
+            email="admintaskit@gmail.com",
+            password="Adminpass123!",
+            full_name="TaskiT Admin",
+            phone_number="+254700000000",
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(admin)
+
+        response = api_client.post("/api/v1/auth/activate-tasker/")
+
+        self.assertEqual(response.status_code, 403)
+
     @override_settings(EMAIL_VERIFICATION_ENABLED=True, EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_registration_requires_email_verification_by_default(self):
         api_client = APIClient()

@@ -118,6 +118,8 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
 
     def perform_update(self, serializer):
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            raise PermissionDenied("Admin accounts cannot manage marketplace tasks.")
         task = self.get_object()
         if task.client_id != self.request.user.id:
             raise PermissionDenied("Only the task client can update this task.")
@@ -126,6 +128,8 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer.save()
 
     def destroy(self, request, *args, **kwargs):
+        if request.user.is_staff or request.user.is_superuser:
+            raise PermissionDenied("Admin accounts cannot manage marketplace tasks.")
         task = self.get_object()
         if task.client_id != request.user.id:
             raise PermissionDenied("Only the task client can cancel this task.")
@@ -209,6 +213,8 @@ class AcceptBidView(APIView):
 
     @transaction.atomic
     def post(self, request, task_id, bid_id):
+        if request.user.is_staff or request.user.is_superuser:
+            raise PermissionDenied("Admin accounts cannot accept marketplace bids.")
         task = get_object_or_404(Task.objects.select_for_update(), pk=task_id)
         if task.client_id != request.user.id:
             raise PermissionDenied("Only the task client can accept bids.")
@@ -244,6 +250,8 @@ class RejectBidView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, task_id, bid_id):
+        if request.user.is_staff or request.user.is_superuser:
+            raise PermissionDenied("Admin accounts cannot reject marketplace bids.")
         task = get_object_or_404(Task, pk=task_id)
         if task.client_id != request.user.id:
             raise PermissionDenied("Only the task client can reject bids.")
@@ -261,6 +269,8 @@ class MarkTaskCompleteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, task_id):
+        if request.user.is_staff or request.user.is_superuser:
+            raise PermissionDenied("Admin accounts cannot complete marketplace tasks.")
         task = get_object_or_404(
             Task.objects.select_related("client", "assigned_tasker", "transaction"),
             pk=task_id,

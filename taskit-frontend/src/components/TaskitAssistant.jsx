@@ -16,6 +16,7 @@ const starterPrompts = [
 
 export default function TaskitAssistant() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const user = useAuthStore((state) => state.user)
   const [isOpen, setIsOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [localMessages, setLocalMessages] = useState([])
@@ -48,7 +49,7 @@ export default function TaskitAssistant() {
     },
   })
 
-  if (!isAuthenticated) return null
+  if (!isAuthenticated || user?.is_staff || user?.is_superuser) return null
 
   const submitMessage = (messageText = draft) => {
     const message = messageText.trim()

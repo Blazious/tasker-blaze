@@ -32,7 +32,7 @@ export default function LoginPage() {
       localStorage.setItem('refreshToken', tokens.refresh)
       const user = await getMe()
       setAuth(user, tokens)
-      navigate('/dashboard')
+      navigate(user.is_staff || user.is_superuser ? '/admin-panel' : '/dashboard')
     } catch (loginError) {
       const message = getApiErrorMessage(loginError, 'Login failed. Please check your details.')
       setError(

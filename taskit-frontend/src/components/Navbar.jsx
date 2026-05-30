@@ -23,9 +23,10 @@ function Navbar() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const user = useAuthStore((state) => state.user)
   const [unreadCount, setUnreadCount] = useState(0)
+  const isAdmin = Boolean(user?.is_staff || user?.is_superuser)
   const visibleNavItems =
-    user?.is_staff || user?.is_superuser
-      ? [...navItems, { label: 'Admin', to: '/admin-panel' }]
+    isAdmin
+      ? [{ label: 'Admin', to: '/admin-panel' }]
       : navItems
 
   useEffect(() => {
@@ -63,7 +64,7 @@ function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-        <Link to="/" className="flex items-center" aria-label="TaskiT home">
+        <Link to={isAdmin ? '/admin-panel' : '/'} className="flex items-center" aria-label="TaskiT home">
           <img src={taskitLogo} alt="TaskiT" className="h-11 w-auto" />
         </Link>
 
@@ -96,7 +97,7 @@ function Navbar() {
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
-          <InviteButton className="inline-flex items-center gap-2 rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white hover:bg-[#1ebe5d]" />
+          {!isAdmin && <InviteButton className="inline-flex items-center gap-2 rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white hover:bg-[#1ebe5d]" />}
           {isAuthenticated ? (
             <button
               type="button"
@@ -150,7 +151,7 @@ function Navbar() {
                 )}
               </NavLink>
             ))}
-            <InviteButton className="rounded-md bg-[#25D366] px-3 py-2 text-left text-sm font-medium text-white" />
+            {!isAdmin && <InviteButton className="rounded-md bg-[#25D366] px-3 py-2 text-left text-sm font-medium text-white" />}
             <button
               type="button"
               onClick={handleLogout}

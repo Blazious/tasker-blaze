@@ -192,6 +192,8 @@ class TaskSerializer(serializers.ModelSerializer):
         if request and request.method == "POST":
             if not user or not user.is_authenticated:
                 raise serializers.ValidationError("Authentication is required.")
+            if user.is_staff or user.is_superuser:
+                raise serializers.ValidationError("Admin accounts cannot post marketplace tasks.")
             if not user.is_verified:
                 raise serializers.ValidationError("Only verified users can post tasks.")
             if attrs.get("task_photo") and not cloudinary.config().api_key:
@@ -309,6 +311,8 @@ class BidCreateSerializer(serializers.ModelSerializer):
         task = self.context["task"]
         user = request.user
 
+        if user.is_staff or user.is_superuser:
+            raise serializers.ValidationError("Admin accounts cannot bid on marketplace tasks.")
         if not user.is_tasker_active:
             raise serializers.ValidationError(
                 "Activate tasker mode before placing bids."
