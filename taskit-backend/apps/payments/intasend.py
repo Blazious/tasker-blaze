@@ -1,5 +1,6 @@
 import logging
 from decimal import Decimal
+from json import JSONDecodeError
 
 import requests
 from django.conf import settings
@@ -38,7 +39,7 @@ class IntaSendClient:
         try:
             response.raise_for_status()
         except requests.RequestException as exc:
-            details = sanitize_for_logs(response.text[:500])
+            details = self._error_details(response)
             logger.exception(
                 "%s: %s",
                 error_message,
@@ -48,6 +49,20 @@ class IntaSendClient:
         data = response.json()
         logger.warning("IntaSend response %s data=%s", path, sanitize_for_logs(data))
         return data
+
+    def _error_details(self, response):
+        try:
+            data = response.json()
+        except (ValueError, JSONDecodeError):
+            text = response.text[:500].strip()
+            return sanitize_for_logs(text) or f"HTTP {response.status_code}"
+
+        data = sanitize_for_logs(data)
+        if isinstance(data, dict):
+            for key in ("detail", "message", "error", "errors", "non_field_errors"):
+                if data.get(key):
+                    return data[key]
+        return data or f"HTTP {response.status_code}"
 
     def _mpesa_amount(self, amount):
         value = Decimal(str(amount))
@@ -64,6 +79,9 @@ class IntaSendClient:
         normalized_phone = validate_kenyan_mobile(phone_number, "Your profile")
         amount = self._mpesa_amount(invoice.amount)
         api_ref = f"TASKIT-INVOICE-{invoice.id}-{timezone.now():%Y%m%d%H%M%S}"
+        name_parts = (invoice.tasker.full_name or "").strip().split(maxsplit=1)
+        first_name = name_parts[0] if name_parts else ""
+        last_name = name_parts[1] if len(name_parts) > 1 else ""
         payment = PlatformInvoicePayment.objects.create(
             invoice=invoice,
             tasker=invoice.tasker,
@@ -74,7 +92,12 @@ class IntaSendClient:
         payload = {
             "amount": amount,
             "phone_number": normalized_phone,
+            "email": invoice.tasker.email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "currency": "KES",
             "api_ref": api_ref,
+            "narrative": f"TaskiT platform invoice #{invoice.id}",
             "mobile_tarrif": "CUSTOMER-PAYS",
         }
         response = self._post(

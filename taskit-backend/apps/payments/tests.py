@@ -373,6 +373,9 @@ class PaymentTestCase(TestCase):
         payload = mock_post.call_args.kwargs["json"]
         self.assertEqual(payload["amount"], "70")
         self.assertEqual(payload["phone_number"], "254700000002")
+        self.assertEqual(payload["email"], self.tasker.email)
+        self.assertEqual(payload["currency"], "KES")
+        self.assertEqual(payload["narrative"], f"TaskiT platform invoice #{invoice.id}")
 
     @override_settings(
         INTASEND_SECRET_KEY="ISSecretKey_test_mock",
