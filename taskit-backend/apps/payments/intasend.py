@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 
 import requests
 from django.conf import settings
@@ -27,6 +28,7 @@ class IntaSendClient:
         if not self.secret_key:
             raise ValidationError("IntaSend is not configured. Add INTASEND_SECRET_KEY.")
 
+        logger.warning("IntaSend request %s payload=%s", path, sanitize_for_logs(payload))
         response = requests.post(
             f"{self.base_url}{path}",
             json=payload,
@@ -36,16 +38,31 @@ class IntaSendClient:
         try:
             response.raise_for_status()
         except requests.RequestException as exc:
+            details = sanitize_for_logs(response.text[:500])
             logger.exception(
                 "%s: %s",
                 error_message,
-                sanitize_for_logs(response.text[:500]),
+                details,
             )
-            raise ValidationError(error_message) from exc
-        return response.json()
+            raise ValidationError(f"{error_message}: {details}") from exc
+        data = response.json()
+        logger.warning("IntaSend response %s data=%s", path, sanitize_for_logs(data))
+        return data
+
+    def _mpesa_amount(self, amount):
+        value = Decimal(str(amount))
+        whole_value = value.to_integral_value()
+        if value != whole_value:
+            raise ValidationError(
+                "Platform invoice amount must be a whole KES amount before M-Pesa payment can start."
+            )
+        if whole_value <= 0:
+            raise ValidationError("Platform invoice amount must be greater than zero.")
+        return str(int(whole_value))
 
     def send_invoice_stk_push(self, invoice, phone_number):
         normalized_phone = validate_kenyan_mobile(phone_number, "Your profile")
+        amount = self._mpesa_amount(invoice.amount)
         api_ref = f"TASKIT-INVOICE-{invoice.id}-{timezone.now():%Y%m%d%H%M%S}"
         payment = PlatformInvoicePayment.objects.create(
             invoice=invoice,
@@ -55,7 +72,7 @@ class IntaSendClient:
             phone_number=normalized_phone,
         )
         payload = {
-            "amount": str(invoice.amount),
+            "amount": amount,
             "phone_number": normalized_phone,
             "api_ref": api_ref,
             "mobile_tarrif": "CUSTOMER-PAYS",

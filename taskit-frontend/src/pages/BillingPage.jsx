@@ -3,6 +3,7 @@ import { CalendarClock, CreditCard, Loader2, ReceiptText, ShieldAlert, Smartphon
 import toast from 'react-hot-toast'
 import { createTestPlatformInvoice, generatePlatformInvoice, getPlatformBilling, getPlatformInvoicePaymentStatus, payPlatformInvoice } from '../api/payments.js'
 import { useAuthStore } from '../store/authStore.js'
+import { getApiErrorMessage } from '../utils/apiError.js'
 
 export default function BillingPage() {
   const user = useAuthStore((state) => state.user)
@@ -24,6 +25,9 @@ export default function BillingPage() {
     onSuccess: (data) => {
       toast.success(data.message || 'STK push sent.')
       queryClient.invalidateQueries({ queryKey: ['platform-billing'] })
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Could not start invoice payment.'))
     },
   })
   const checkInvoiceMutation = useMutation({

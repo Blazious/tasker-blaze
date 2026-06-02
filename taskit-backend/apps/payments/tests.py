@@ -1,6 +1,6 @@
 from decimal import Decimal
 from datetime import timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -344,3 +344,52 @@ class PaymentTestCase(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    @override_settings(
+        INTASEND_SECRET_KEY="ISSecretKey_test_mock",
+        INTASEND_BASE_URL="https://sandbox.intasend.com/api/v1",
+    )
+    @patch("apps.payments.intasend.requests.post")
+    def test_platform_invoice_payment_sends_whole_shilling_amount(self, mock_post):
+        invoice = PlatformInvoice.objects.create(
+            tasker=self.tasker,
+            billing_month=timezone.now().date().replace(day=1),
+            amount=Decimal("70.00"),
+            due_date=timezone.now() + timedelta(days=3),
+        )
+        response_mock = Mock()
+        response_mock.raise_for_status.return_value = None
+        response_mock.json.return_value = {
+            "invoice_id": "intasend-invoice-123",
+            "checkout_id": "checkout-123",
+        }
+        mock_post.return_value = response_mock
+        api_client = APIClient()
+        api_client.force_authenticate(self.tasker)
+
+        response = api_client.post(f"/api/v1/payments/platform-invoices/{invoice.id}/pay/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["amount"], "70")
+        self.assertEqual(payload["phone_number"], "254700000002")
+
+    @override_settings(
+        INTASEND_SECRET_KEY="ISSecretKey_test_mock",
+        INTASEND_BASE_URL="https://sandbox.intasend.com/api/v1",
+    )
+    @patch("apps.payments.intasend.requests.post")
+    def test_platform_invoice_payment_rejects_fractional_mpesa_amount(self, mock_post):
+        invoice = PlatformInvoice.objects.create(
+            tasker=self.tasker,
+            billing_month=timezone.now().date().replace(day=1),
+            amount=Decimal("70.50"),
+            due_date=timezone.now() + timedelta(days=3),
+        )
+        api_client = APIClient()
+        api_client.force_authenticate(self.tasker)
+
+        response = api_client.post(f"/api/v1/payments/platform-invoices/{invoice.id}/pay/")
+
+        self.assertEqual(response.status_code, 400)
+        mock_post.assert_not_called()

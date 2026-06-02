@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Sum
 from django.utils import timezone
 
-from .models import PlatformFeeUsage, PlatformInvoice, Transaction, quantize_money
+from .models import PlatformFeeUsage, PlatformInvoice, Transaction, quantize_money, quantize_whole_shillings
 
 TRIAL_DAYS = 3
 GRACE_PERIOD_DAYS = 3
@@ -63,7 +63,7 @@ def generate_invoice_for_month(user, billing_month=None):
         is_trial_usage=False,
     )
     amount = usages.aggregate(total=Sum("fee_amount"))["total"] or Decimal("0.00")
-    amount = quantize_money(amount)
+    amount = quantize_whole_shillings(amount)
     if amount <= 0:
         return None
 

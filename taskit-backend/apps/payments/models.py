@@ -6,11 +6,16 @@ from django.utils import timezone
 
 
 MONEY_QUANTIZER = Decimal("0.01")
+WHOLE_SHILLING_QUANTIZER = Decimal("1")
 PLATFORM_FEE_RATE = Decimal("0.10")
 
 
 def quantize_money(value):
     return Decimal(value).quantize(MONEY_QUANTIZER, rounding=ROUND_HALF_UP)
+
+
+def quantize_whole_shillings(value):
+    return Decimal(value).quantize(WHOLE_SHILLING_QUANTIZER, rounding=ROUND_HALF_UP)
 
 
 class Transaction(models.Model):
