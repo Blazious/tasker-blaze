@@ -61,6 +61,7 @@ class SubmitReviewView(APIView):
                 punctuality_rating=serializer.validated_data.get("punctuality_rating", serializer.validated_data["rating"]),
                 quality_rating=serializer.validated_data.get("quality_rating", serializer.validated_data["rating"]),
                 comment=serializer.validated_data["comment"],
+                is_visible=True,
             )
             review.full_clean()
         except IntegrityError as exc:

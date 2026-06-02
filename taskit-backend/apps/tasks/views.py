@@ -329,7 +329,8 @@ class MarkTaskCompleteView(APIView):
 
         return Response(
             {
-                "message": "Client has been notified to review and release payment.",
+                "message": "Your task has been marked complete. Please wait for client approval and funds release.",
+                "client_message": "The tasker marked this task complete. Review the work and release escrow if everything looks good.",
                 "tasker_completed_at": task.tasker_completed_at,
             }
         )

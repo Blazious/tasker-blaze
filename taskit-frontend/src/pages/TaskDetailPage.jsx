@@ -305,6 +305,11 @@ export default function TaskDetailPage() {
   const invalidateTask = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['task', taskId] })
     queryClient.invalidateQueries({ queryKey: ['task-bids', taskId] })
+    queryClient.invalidateQueries({ queryKey: ['my-tasks'] })
+    queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
+    queryClient.invalidateQueries({ queryKey: ['auth-stats'] })
+    queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] })
   }, [queryClient, taskId])
 
   useEffect(() => {
@@ -442,6 +447,7 @@ export default function TaskDetailPage() {
     mutationFn: () => releasePayment(taskId),
     onSuccess: () => {
       toast.success('Payment released. You can now leave a review.')
+      setReviewSubmitted(false)
       invalidateTask()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not release payment.')),
@@ -450,7 +456,7 @@ export default function TaskDetailPage() {
   const markCompleteMutation = useMutation({
     mutationFn: () => markTaskComplete(taskId),
     onSuccess: (data) => {
-      toast.success(data.message || 'Client notified')
+      toast.success(data.tasker_completed_at ? 'Your task has been marked complete. Please wait for client approval and funds release.' : data.message || 'Client notified')
       invalidateTask()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not mark task complete.')),

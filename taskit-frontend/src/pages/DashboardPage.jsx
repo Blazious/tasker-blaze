@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { BriefcaseBusiness, CheckCircle2, HandCoins, Loader2, Plus, Search, Star, Wifi } from 'lucide-react'
 import { activateTasker, getMe, getStats, updateAvailability } from '../api/auth.js'
+import { getMyTasks } from '../api/tasks.js'
 import { useAuthStore } from '../store/authStore.js'
 import { CAMPUS_BACKGROUNDS } from '../constants/campusImages.js'
 import LocationShareButton from '../components/LocationShareButton.jsx'
@@ -31,6 +32,12 @@ export default function DashboardPage() {
     queryFn: getStats,
   })
 
+  const myTasksQuery = useQuery({
+    queryKey: ['my-tasks'],
+    queryFn: getMyTasks,
+    enabled: Boolean(user),
+  })
+
   const activateMutation = useMutation({
     mutationFn: activateTasker,
     onSuccess: async () => {
@@ -56,9 +63,45 @@ export default function DashboardPage() {
     active_bids: 0,
     total_earned: '0.00',
   }
+  const approvalTasks = (myTasksQuery.data?.results ?? []).filter((task) => (
+    task.status === 'IN_PROGRESS'
+    && task.tasker_completed_at
+    && task.payment_status !== 'RELEASED'
+  ))
 
   return (
     <section className="grid gap-6">
+      {approvalTasks.length > 0 && (
+        <div className="rounded-lg border border-primary/30 bg-emerald-50 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-primary">
+                <CheckCircle2 size={16} />
+                Client approval needed
+              </p>
+              <h2 className="mt-1 text-xl font-bold text-text-dark">
+                {approvalTasks.length === 1 ? 'A tasker marked your task complete.' : `${approvalTasks.length} tasks are waiting for your approval.`}
+              </h2>
+              <p className="mt-1 text-sm text-primary/80">
+                Review the work in TaskiT, approve escrow release, then leave a rating.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {approvalTasks.slice(0, 3).map((task) => (
+                <Link
+                  key={task.id}
+                  to={`/tasks/${task.id}`}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white"
+                >
+                  <CheckCircle2 size={16} />
+                  Review & Release
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-[#071c15] p-6 shadow-sm">
         <img
           src={dashboardImage}
