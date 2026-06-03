@@ -472,7 +472,11 @@ export default function TaskDetailPage() {
   })
 
   const markCompleteMutation = useMutation({
-    mutationFn: () => markTaskComplete(taskId),
+    mutationFn: async () => {
+      const paymentSync = await getPaymentStatus(taskId)
+      console.log('TaskiT pre-completion escrow sync response:', paymentSync)
+      return markTaskComplete(taskId)
+    },
     onSuccess: (data) => {
       const message = data.tasker_completed_at ? 'Your task has been marked complete. Please wait for client approval and funds release.' : data.message || 'Client notified'
       console.log('TaskiT mark complete response:', data)
