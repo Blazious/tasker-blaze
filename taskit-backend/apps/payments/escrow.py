@@ -12,6 +12,102 @@ from .econfirm import EconfirmClient
 from .models import EscrowLedger, Transaction
 
 
+FUNDED_STATES = {
+    "funded",
+    "in_progress",
+    "held",
+    "escrowed",
+    "paid",
+    "success",
+    "successful",
+}
+FUNDED_EVENTS = {
+    "payment.success",
+    "escrow.funded",
+    "funds.held",
+    "payment_success",
+    "payment_successful",
+}
+RELEASED_STATES = {
+    "complete",
+    "completed",
+    "released",
+    "release",
+}
+RELEASED_EVENTS = {
+    "funds.released",
+    "escrow.released",
+    "funds_released",
+    "escrow_released",
+}
+
+
+def _collect_external_values(payload, keys):
+    values = []
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key in keys and value is not None:
+                values.append(str(value).lower())
+            values.extend(_collect_external_values(value, keys))
+    elif isinstance(payload, list):
+        for item in payload:
+            values.extend(_collect_external_values(item, keys))
+    return values
+
+
+def econfirm_payload_is_funded(payload):
+    status_values = _collect_external_values(
+        payload,
+        {"status", "state", "payment_status", "transaction_status"},
+    )
+    event_values = _collect_external_values(payload, {"event", "event_type", "type"})
+    return any(value in FUNDED_STATES for value in status_values) or any(
+        value in FUNDED_EVENTS for value in event_values
+    )
+
+
+def econfirm_payload_is_released(payload):
+    status_values = _collect_external_values(
+        payload,
+        {"status", "state", "payment_status", "transaction_status"},
+    )
+    event_values = _collect_external_values(payload, {"event", "event_type", "type"})
+    return any(value in RELEASED_STATES for value in status_values) or any(
+        value in RELEASED_EVENTS for value in event_values
+    )
+
+
+def sync_transaction_from_econfirm(transaction):
+    if (
+        not transaction.econfirm_transaction_id
+        or transaction.status not in {Transaction.Status.PENDING_PAYMENT, Transaction.Status.ESCROWED}
+    ):
+        return None, False
+
+    external_status = EconfirmClient().check_transaction_status(
+        transaction.econfirm_transaction_id
+    )
+    if external_status and econfirm_payload_is_released(external_status):
+        mark_funds_released_from_econfirm(transaction, external_status)
+        transaction.refresh_from_db()
+        return external_status, True
+    if (
+        transaction.status == Transaction.Status.PENDING_PAYMENT
+        and external_status
+        and econfirm_payload_is_funded(external_status)
+    ):
+        hold_funds(transaction)
+        transaction.refresh_from_db()
+        return external_status, True
+    return external_status, False
+
+
+def sync_funds_from_econfirm(transaction):
+    external_status, synced = sync_transaction_from_econfirm(transaction)
+    transaction.refresh_from_db()
+    return external_status, synced and transaction.status == Transaction.Status.ESCROWED
+
+
 @db_transaction.atomic
 def hold_funds(transaction):
     now = timezone.now()
@@ -42,6 +138,43 @@ def hold_funds(transaction):
         Notification.Type.PAYMENT_RECEIVED,
         "Payment confirmed",
         "Payment confirmed. You can start the task.",
+        related_task=task,
+    )
+    return transaction
+
+
+@db_transaction.atomic
+def mark_funds_released_from_econfirm(transaction, payload=None):
+    if transaction.status == Transaction.Status.RELEASED:
+        track_platform_fee(transaction)
+        return transaction
+
+    now = timezone.now()
+    task = transaction.task
+
+    transaction.status = Transaction.Status.RELEASED
+    transaction.released_at = transaction.released_at or now
+    transaction.save(update_fields=["status", "released_at", "updated_at"])
+
+    task.status = Task.Status.COMPLETED
+    task.completed_at = task.completed_at or now
+    task.save(update_fields=["status", "completed_at", "updated_at"])
+
+    EscrowLedger.objects.get_or_create(
+        transaction=transaction,
+        action=EscrowLedger.Action.RELEASE,
+        defaults={
+            "amount": transaction.tasker_payout,
+            "note": "Tasker payout synced from eConfirm",
+        },
+    )
+    track_platform_fee(transaction)
+
+    send_notification(
+        transaction.tasker,
+        Notification.Type.TASK_COMPLETED,
+        "Payout released",
+        f"KES {transaction.tasker_payout} has been released. Reviews are now open.",
         related_task=task,
     )
     return transaction

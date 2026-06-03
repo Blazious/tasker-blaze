@@ -10,8 +10,7 @@ from rest_framework.views import APIView
 
 from apps.notifications.models import Notification
 from apps.notifications.utils import send_notification
-from apps.payments.econfirm import EconfirmClient
-from apps.payments.escrow import hold_funds
+from apps.payments.escrow import sync_funds_from_econfirm
 from apps.payments.models import Transaction
 
 from .models import Bid, Task, TaskCategory
@@ -280,33 +279,22 @@ class MarkTaskCompleteView(APIView):
 
         transaction_obj = getattr(task, "transaction", None)
         escrow_is_funded = transaction_obj and transaction_obj.status == Transaction.Status.ESCROWED
-        if (
-            transaction_obj
-            and transaction_obj.status == Transaction.Status.PENDING_PAYMENT
-            and transaction_obj.econfirm_transaction_id
-        ):
-            external_status = EconfirmClient().check_transaction_status(
-                transaction_obj.econfirm_transaction_id
-            )
-            external_data = external_status.get("data", external_status) if external_status else {}
-            external_state = str(external_data.get("status", "")).lower()
-            external_event = str(external_data.get("event", external_status.get("event", "") if external_status else "")).lower()
-            if external_state in {"funded", "in_progress", "held", "escrowed"} or external_event in {
-                "payment.success",
-                "escrow.funded",
-                "funds.held",
-            }:
-                hold_funds(transaction_obj)
+        external_status = None
+        if transaction_obj and transaction_obj.status == Transaction.Status.PENDING_PAYMENT:
+            external_status, escrow_is_funded = sync_funds_from_econfirm(transaction_obj)
+            if escrow_is_funded:
                 task.refresh_from_db()
                 transaction_obj.refresh_from_db()
-                escrow_is_funded = True
 
         if task.status == Task.Status.ASSIGNED and escrow_is_funded:
             task.status = Task.Status.IN_PROGRESS
             task.save(update_fields=["status", "updated_at"])
         elif task.status != Task.Status.IN_PROGRESS:
             raise ValidationError(
-                "Escrow funding has not synced yet. Tap Check Escrow or ask the client to confirm payment."
+                {
+                    "message": "Escrow funding has not synced yet. Tap Check Escrow or ask the client to tap I Already Paid after completing the STK payment.",
+                    "external_status": external_status,
+                }
             )
         if task.tasker_completed_at:
             return Response(

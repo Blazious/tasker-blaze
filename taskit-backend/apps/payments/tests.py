@@ -218,6 +218,33 @@ class PaymentTestCase(TestCase):
         self.assertEqual(transaction.mpesa_receipt_number, "RCP123")
         self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
 
+    @patch("apps.payments.escrow.send_notification")
+    def test_econfirm_callback_reconciles_manual_release_and_tracks_billing(self, _mock_notify):
+        self.tasker.date_joined = timezone.now() - timedelta(days=20)
+        self.tasker.save(update_fields=["date_joined"])
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_released_123"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/payments/econfirm-callback/",
+            {
+                "id": "txn_released_123",
+                "event": "funds.released",
+                "status": "released",
+            },
+            format="json",
+        )
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(transaction.status, Transaction.Status.RELEASED)
+        self.assertIsNotNone(transaction.released_at)
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        self.assertTrue(PlatformFeeUsage.objects.filter(transaction=transaction).exists())
+
     @override_settings(ECONFIRM_MOCK=True)
     @patch("apps.payments.econfirm.EconfirmClient.create_escrow")
     @patch("apps.payments.econfirm.EconfirmClient.initiate_stk_push")

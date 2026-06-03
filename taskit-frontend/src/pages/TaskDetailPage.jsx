@@ -252,6 +252,7 @@ export default function TaskDetailPage() {
   const [isDisputeOpen, setIsDisputeOpen] = useState(false)
   const [selectedTaskerId, setSelectedTaskerId] = useState(null)
   const [error, setError] = useState('')
+  const [completionNotice, setCompletionNotice] = useState('')
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
   const [paymentPollingUntil, setPaymentPollingUntil] = useState(0)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
@@ -343,21 +344,33 @@ export default function TaskDetailPage() {
     onSuccess: (data) => {
       if (['ESCROWED', 'RELEASED'].includes(data.status)) {
         toast.success('Escrow funded. Release button is ready.')
+        setError('')
         invalidateTask()
       } else {
-        toast(data.external_status ? `eConfirm status: ${data.external_status?.data?.status || data.external_status?.status || data.status}` : `Payment status: ${data.status}`)
+        const message = data.external_status ? `eConfirm status: ${data.external_status?.data?.status || data.external_status?.status || data.status}` : `Payment status: ${data.status}`
+        toast(message)
+        setError('Escrow is still not synced. If the STK payment is complete, tap I Already Paid so TaskiT checks eConfirm again.')
       }
     },
-    onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not check payment status.')),
+    onError: (mutationError) => {
+      const message = getApiErrorMessage(mutationError, 'Could not check payment status.')
+      setError(message)
+      toast.error(message)
+    },
   })
 
   const confirmFundedMutation = useMutation({
     mutationFn: () => confirmEscrowFunded(taskId),
     onSuccess: () => {
       toast.success('Escrow confirmed. Release button is ready.')
+      setError('')
       invalidateTask()
     },
-    onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not confirm escrow funding.')),
+    onError: (mutationError) => {
+      const message = getApiErrorMessage(mutationError, 'Could not confirm escrow funding.')
+      setError(message)
+      toast.error(message)
+    },
   })
 
   const bidMutation = useMutation({
@@ -456,10 +469,18 @@ export default function TaskDetailPage() {
   const markCompleteMutation = useMutation({
     mutationFn: () => markTaskComplete(taskId),
     onSuccess: (data) => {
-      toast.success(data.tasker_completed_at ? 'Your task has been marked complete. Please wait for client approval and funds release.' : data.message || 'Client notified')
+      const message = data.tasker_completed_at ? 'Your task has been marked complete. Please wait for client approval and funds release.' : data.message || 'Client notified'
+      setError('')
+      setCompletionNotice(message)
+      toast.success(message)
       invalidateTask()
     },
-    onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not mark task complete.')),
+    onError: (mutationError) => {
+      const message = getApiErrorMessage(mutationError, 'Could not mark task complete.')
+      setCompletionNotice(message)
+      setError(message)
+      toast.error(message)
+    },
   })
 
   const reviewMutation = useMutation({
@@ -566,7 +587,13 @@ export default function TaskDetailPage() {
         )}
       </div>
 
-      {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {completionNotice && (
+        <p className={`rounded-md px-3 py-2 text-sm font-medium ${error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-primary'}`}>
+          {completionNotice}
+        </p>
+      )}
+
+      {error && !completionNotice && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {canOpenChat && (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 shadow-sm">

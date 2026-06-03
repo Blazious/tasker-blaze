@@ -15,11 +15,18 @@ from rest_framework.views import APIView
 
 from apps.tasks.models import Bid, Task
 
-from .billing import billing_summary, generate_invoice_for_month, track_platform_fee
+from .billing import billing_summary, generate_invoice_for_month
 from .econfirm import EconfirmClient
-from .escrow import flag_dispute, hold_funds, release_funds
+from .escrow import (
+    flag_dispute,
+    hold_funds,
+    mark_funds_released_from_econfirm,
+    release_funds,
+    sync_funds_from_econfirm,
+    sync_transaction_from_econfirm,
+)
 from .intasend import IntaSendClient, mark_invoice_payment_failed, mark_invoice_payment_paid
-from .models import DisputeNote, EscrowLedger, PlatformFeeUsage, PlatformInvoice, PlatformInvoicePayment, Transaction
+from .models import DisputeNote, PlatformFeeUsage, PlatformInvoice, PlatformInvoicePayment, Transaction
 from .serializers import AdminPlatformInvoiceSerializer, DisputeCreateSerializer, TransactionSerializer
 
 logger = logging.getLogger(__name__)
@@ -213,9 +220,8 @@ class EconfirmCallbackView(APIView):
             elif event_type == "funds.refunded" or econfirm_status == "refunded":
                 transaction.status = Transaction.Status.REFUNDED
                 transaction.save(update_fields=["status", "updated_at"])
-            elif event_type == "funds.released" or econfirm_status in {"complete", "completed"}:
-                transaction.status = Transaction.Status.RELEASED
-                transaction.save(update_fields=["status", "updated_at"])
+            elif event_type in {"funds.released", "escrow.released"} or econfirm_status in {"complete", "completed", "released"}:
+                mark_funds_released_from_econfirm(transaction, request.data)
         except Exception:
             logger.exception("eConfirm callback processing failed")
             return Response({"status": "accepted"}, status=status.HTTP_200_OK)
@@ -235,17 +241,10 @@ class PaymentStatusView(APIView):
         if request.user.id not in {transaction.client_id, transaction.tasker_id}:
             raise PermissionDenied("You cannot view this payment status.")
 
-        external_status = None
-        if transaction.econfirm_transaction_id and transaction.status == Transaction.Status.PENDING_PAYMENT:
-            external_status = EconfirmClient().check_transaction_status(
-                transaction.econfirm_transaction_id
-            )
-            external_data = external_status.get("data", external_status) if external_status else {}
-            external_state = str(external_data.get("status", "")).lower()
-            if external_state in {"funded", "in_progress", "held", "escrowed"}:
-                hold_funds(transaction)
-                transaction.refresh_from_db()
-                task.refresh_from_db()
+        external_status, synced = sync_transaction_from_econfirm(transaction)
+        if synced:
+            transaction.refresh_from_db()
+            task.refresh_from_db()
 
         return Response(
             {
@@ -263,9 +262,6 @@ class ConfirmEscrowFundedView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, task_id):
-        if not settings.DEBUG:
-            raise PermissionDenied("Manual escrow confirmation is only available in local development.")
-
         transaction = get_object_or_404(
             Transaction.objects.select_related("task"),
             task_id=task_id,
@@ -277,11 +273,21 @@ class ConfirmEscrowFundedView(APIView):
         if not transaction.econfirm_transaction_id:
             raise ValidationError("No eConfirm transaction exists for this task yet.")
 
-        hold_funds(transaction)
+        external_status, synced = sync_funds_from_econfirm(transaction)
+        if not synced:
+            if not settings.DEBUG:
+                raise ValidationError(
+                    {
+                        "message": "eConfirm has not confirmed escrow funding yet. Tap Check again after the STK payment completes.",
+                        "external_status": external_status,
+                    }
+                )
+            hold_funds(transaction)
         return Response(
             {
                 "message": "Escrow funding confirmed. You can now release after the task is complete.",
                 "status": Transaction.Status.ESCROWED,
+                "external_status": external_status,
             }
         )
 
@@ -299,42 +305,12 @@ class ReleasePaymentView(APIView):
         if not transaction.task.tasker_completed_at:
             raise ValidationError("The tasker must mark the task complete before funds can be released.")
 
-        if transaction.status == Transaction.Status.PENDING_PAYMENT and transaction.econfirm_transaction_id:
-            external_status = EconfirmClient().check_transaction_status(
-                transaction.econfirm_transaction_id
-            )
-            external_data = external_status.get("data", external_status) if external_status else {}
-            external_state = str(external_data.get("status", "")).lower()
-            external_event = str(external_data.get("event", external_status.get("event", "") if external_status else "")).lower()
-            if external_state in {"funded", "in_progress", "held", "escrowed"} or external_event in {
-                "payment.success",
-                "escrow.funded",
-                "funds.held",
-            }:
-                hold_funds(transaction)
+        if transaction.status == Transaction.Status.PENDING_PAYMENT:
+            external_status, synced = sync_transaction_from_econfirm(transaction)
+            if synced:
                 transaction.refresh_from_db()
-            elif external_state in {"complete", "completed", "released"} or external_event in {
-                "funds.released",
-                "escrow.released",
-            }:
-                now = timezone.now()
-                transaction.status = Transaction.Status.RELEASED
-                transaction.released_at = now
-                transaction.save(update_fields=["status", "released_at", "updated_at"])
-                task = transaction.task
-                task.status = Task.Status.COMPLETED
-                task.completed_at = now
-                task.save(update_fields=["status", "completed_at", "updated_at"])
-                EscrowLedger.objects.get_or_create(
-                    transaction=transaction,
-                    action=EscrowLedger.Action.RELEASE,
-                    defaults={
-                        "amount": transaction.tasker_payout,
-                        "note": "Tasker payout synced from eConfirm",
-                    },
-                )
-                track_platform_fee(transaction)
-                return Response({"message": "Payment release synced. Reviews are now open."})
+                if transaction.status == Transaction.Status.RELEASED:
+                    return Response({"message": "Payment release synced. Reviews are now open."})
 
         if transaction.status != Transaction.Status.ESCROWED:
             raise ValidationError("Escrow is not funded yet, so funds cannot be released.")
