@@ -20,6 +20,8 @@ from .econfirm import EconfirmClient
 from .escrow import (
     flag_dispute,
     hold_funds,
+    econfirm_payload_is_funded,
+    econfirm_payload_is_released,
     mark_funds_released_from_econfirm,
     release_funds,
     sync_funds_from_econfirm,
@@ -211,7 +213,7 @@ class EconfirmCallbackView(APIView):
                 ]
             )
 
-            if event_type in {"payment.success", "escrow.funded", "funds.held"} or econfirm_status in {"funded", "in_progress"}:
+            if econfirm_payload_is_funded(request.data):
                 if transaction.status == Transaction.Status.PENDING_PAYMENT:
                     hold_funds(transaction)
             elif event_type in {"payment.failed", "escrow.failed"}:
@@ -220,7 +222,7 @@ class EconfirmCallbackView(APIView):
             elif event_type == "funds.refunded" or econfirm_status == "refunded":
                 transaction.status = Transaction.Status.REFUNDED
                 transaction.save(update_fields=["status", "updated_at"])
-            elif event_type in {"funds.released", "escrow.released"} or econfirm_status in {"complete", "completed", "released"}:
+            elif econfirm_payload_is_released(request.data):
                 mark_funds_released_from_econfirm(transaction, request.data)
         except Exception:
             logger.exception("eConfirm callback processing failed")

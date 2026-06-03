@@ -303,14 +303,16 @@ export default function TaskDetailPage() {
       && task?.payment_status === 'PENDING_PAYMENT',
   )
 
-  const invalidateTask = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['task', taskId] })
-    queryClient.invalidateQueries({ queryKey: ['task-bids', taskId] })
-    queryClient.invalidateQueries({ queryKey: ['my-tasks'] })
-    queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
-    queryClient.invalidateQueries({ queryKey: ['auth-stats'] })
-    queryClient.invalidateQueries({ queryKey: ['notifications'] })
-    queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] })
+  const refreshTaskWorkflow = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['task-bids', taskId] }),
+      queryClient.invalidateQueries({ queryKey: ['my-tasks'] }),
+      queryClient.invalidateQueries({ queryKey: ['my-assignments'] }),
+      queryClient.invalidateQueries({ queryKey: ['auth-stats'] }),
+      queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] }),
+      queryClient.refetchQueries({ queryKey: ['task', taskId], exact: true }),
+    ])
   }, [queryClient, taskId])
 
   useEffect(() => {
@@ -335,17 +337,23 @@ export default function TaskDetailPage() {
     if (['ESCROWED', 'RELEASED'].includes(paymentStatusQuery.data.status)) {
       window.queueMicrotask(() => setPaymentPollingUntil(0))
       toast.success('Escrow funded. The tasker has been notified.')
-      invalidateTask()
+      console.log('TaskiT payment sync:', paymentStatusQuery.data)
+      refreshTaskWorkflow()
     }
-  }, [invalidateTask, paymentStatusQuery.data])
+  }, [paymentStatusQuery.data, refreshTaskWorkflow])
 
   const checkPaymentMutation = useMutation({
     mutationFn: () => getPaymentStatus(taskId),
     onSuccess: (data) => {
-      if (['ESCROWED', 'RELEASED'].includes(data.status)) {
+      console.log('TaskiT check eConfirm response:', data)
+      if (data.status === 'RELEASED') {
+        toast.success('Payment is released. Reviews are now open.')
+        setError('')
+        refreshTaskWorkflow()
+      } else if (data.status === 'ESCROWED') {
         toast.success('Escrow funded. Release button is ready.')
         setError('')
-        invalidateTask()
+        refreshTaskWorkflow()
       } else {
         const message = data.external_status ? `eConfirm status: ${data.external_status?.data?.status || data.external_status?.status || data.status}` : `Payment status: ${data.status}`
         toast(message)
@@ -361,10 +369,11 @@ export default function TaskDetailPage() {
 
   const confirmFundedMutation = useMutation({
     mutationFn: () => confirmEscrowFunded(taskId),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('TaskiT confirm escrow response:', data)
       toast.success('Escrow confirmed. Release button is ready.')
       setError('')
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => {
       const message = getApiErrorMessage(mutationError, 'Could not confirm escrow funding.')
@@ -394,7 +403,7 @@ export default function TaskDetailPage() {
     onSuccess: () => {
       toast.success('Bid placed')
       setBidForm({ amount: '', message: '' })
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not place bid.')),
   })
@@ -429,7 +438,7 @@ export default function TaskDetailPage() {
     },
     onSuccess: () => {
       toast.success('Bid accepted')
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, mutationError.message || 'Could not accept bid.')),
   })
@@ -438,7 +447,7 @@ export default function TaskDetailPage() {
     mutationFn: (bidId) => rejectBid(taskId, bidId),
     onSuccess: () => {
       toast.success('Bid rejected')
-      invalidateTask()
+      refreshTaskWorkflow()
     },
   })
 
@@ -451,17 +460,18 @@ export default function TaskDetailPage() {
         window.open(data.payment_url, '_blank', 'noopener,noreferrer')
       }
       setPaymentPollingUntil(Date.now() + 120000)
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not initiate payment.')),
   })
 
   const releaseMutation = useMutation({
     mutationFn: () => releasePayment(taskId),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('TaskiT release response:', data)
       toast.success('Payment released. You can now leave a review.')
       setReviewSubmitted(false)
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not release payment.')),
   })
@@ -470,10 +480,11 @@ export default function TaskDetailPage() {
     mutationFn: () => markTaskComplete(taskId),
     onSuccess: (data) => {
       const message = data.tasker_completed_at ? 'Your task has been marked complete. Please wait for client approval and funds release.' : data.message || 'Client notified'
+      console.log('TaskiT mark complete response:', data)
       setError('')
       setCompletionNotice(message)
       toast.success(message)
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => {
       const message = getApiErrorMessage(mutationError, 'Could not mark task complete.')
@@ -497,7 +508,7 @@ export default function TaskDetailPage() {
     onSuccess: () => {
       toast.success('Review submitted')
       setReviewSubmitted(true)
-      invalidateTask()
+      refreshTaskWorkflow()
     },
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not submit review.')),
   })
@@ -509,7 +520,7 @@ export default function TaskDetailPage() {
       setDisputeReason('')
       setDisputeDetails('')
       setIsDisputeOpen(false)
-      invalidateTask()
+      refreshTaskWorkflow()
     },
   })
 

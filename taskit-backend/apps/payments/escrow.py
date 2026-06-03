@@ -55,14 +55,33 @@ def _collect_external_values(payload, keys):
     return values
 
 
+def _normalize_external_value(value):
+    return str(value).lower().replace("-", "_").replace(" ", "_")
+
+
 def econfirm_payload_is_funded(payload):
     status_values = _collect_external_values(
         payload,
         {"status", "state", "payment_status", "transaction_status"},
     )
     event_values = _collect_external_values(payload, {"event", "event_type", "type"})
-    return any(value in FUNDED_STATES for value in status_values) or any(
-        value in FUNDED_EVENTS for value in event_values
+    normalized_statuses = [_normalize_external_value(value) for value in status_values]
+    normalized_events = [_normalize_external_value(value) for value in event_values]
+    return any(
+        value in FUNDED_STATES
+        or "funded" in value
+        or "funds_held" in value
+        or "held" == value
+        or "held_in_escrow" in value
+        or "escrowed" in value
+        or "payment_success" in value
+        for value in normalized_statuses
+    ) or any(
+        value in FUNDED_EVENTS
+        or "funded" in value
+        or "funds_held" in value
+        or "payment_success" in value
+        for value in normalized_events
     )
 
 
@@ -72,8 +91,20 @@ def econfirm_payload_is_released(payload):
         {"status", "state", "payment_status", "transaction_status"},
     )
     event_values = _collect_external_values(payload, {"event", "event_type", "type"})
-    return any(value in RELEASED_STATES for value in status_values) or any(
-        value in RELEASED_EVENTS for value in event_values
+    normalized_statuses = [_normalize_external_value(value) for value in status_values]
+    normalized_events = [_normalize_external_value(value) for value in event_values]
+    return any(
+        value in RELEASED_STATES
+        or "released" in value
+        or "funds_released" in value
+        or "escrow_released" in value
+        for value in normalized_statuses
+    ) or any(
+        value in RELEASED_EVENTS
+        or "released" in value
+        or "funds_released" in value
+        or "escrow_released" in value
+        for value in normalized_events
     )
 
 
