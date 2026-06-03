@@ -20,6 +20,12 @@ FUNDED_STATES = {
     "paid",
     "success",
     "successful",
+    "active",
+    "confirmed",
+    "deposited",
+    "holding",
+    "funds_held",
+    "held_in_escrow",
 }
 FUNDED_EVENTS = {
     "payment.success",
@@ -27,18 +33,33 @@ FUNDED_EVENTS = {
     "funds.held",
     "payment_success",
     "payment_successful",
+    "escrow_funded",
+    "funds_held",
 }
 RELEASED_STATES = {
     "complete",
     "completed",
     "released",
     "release",
+    "closed",
+    "settled",
+    "paid_out",
 }
 RELEASED_EVENTS = {
     "funds.released",
     "escrow.released",
     "funds_released",
     "escrow_released",
+    "transaction.completed",
+}
+STATUS_FIELD_KEYS = {
+    "status",
+    "state",
+    "payment_status",
+    "transaction_status",
+    "escrow_status",
+    "payment_state",
+    "escrow_state",
 }
 
 
@@ -59,10 +80,24 @@ def _normalize_external_value(value):
     return str(value).lower().replace("-", "_").replace(" ", "_")
 
 
+def unwrap_econfirm_payload(payload):
+    if not isinstance(payload, dict):
+        return payload
+    data = payload.get("data")
+    if payload.get("success") is True and isinstance(data, dict):
+        merged = dict(data)
+        for key, value in payload.items():
+            if key != "data" and key not in merged:
+                merged[key] = value
+        return merged
+    return payload
+
+
 def econfirm_payload_is_funded(payload):
+    payload = unwrap_econfirm_payload(payload)
     status_values = _collect_external_values(
         payload,
-        {"status", "state", "payment_status", "transaction_status"},
+        STATUS_FIELD_KEYS,
     )
     event_values = _collect_external_values(payload, {"event", "event_type", "type"})
     normalized_statuses = [_normalize_external_value(value) for value in status_values]
@@ -86,9 +121,10 @@ def econfirm_payload_is_funded(payload):
 
 
 def econfirm_payload_is_released(payload):
+    payload = unwrap_econfirm_payload(payload)
     status_values = _collect_external_values(
         payload,
-        {"status", "state", "payment_status", "transaction_status"},
+        STATUS_FIELD_KEYS,
     )
     event_values = _collect_external_values(payload, {"event", "event_type", "type"})
     normalized_statuses = [_normalize_external_value(value) for value in status_values]
@@ -108,29 +144,38 @@ def econfirm_payload_is_released(payload):
     )
 
 
-def sync_transaction_from_econfirm(transaction):
+def reconcile_transaction_from_econfirm_payload(transaction, payload):
+    if not payload:
+        return payload, False
+
+    payload = unwrap_econfirm_payload(payload)
+    if econfirm_payload_is_released(payload):
+        mark_funds_released_from_econfirm(transaction, payload)
+        transaction.refresh_from_db()
+        return payload, True
     if (
-        not transaction.econfirm_transaction_id
-        or transaction.status not in {Transaction.Status.PENDING_PAYMENT, Transaction.Status.ESCROWED}
+        transaction.status == Transaction.Status.PENDING_PAYMENT
+        and econfirm_payload_is_funded(payload)
     ):
+        hold_funds(transaction)
+        transaction.refresh_from_db()
+        return payload, True
+    return payload, False
+
+
+def sync_transaction_from_econfirm(transaction):
+    if not transaction.econfirm_transaction_id:
+        return None, False
+    if transaction.status not in {
+        Transaction.Status.PENDING_PAYMENT,
+        Transaction.Status.ESCROWED,
+    }:
         return None, False
 
     external_status = EconfirmClient().check_transaction_status(
         transaction.econfirm_transaction_id
     )
-    if external_status and econfirm_payload_is_released(external_status):
-        mark_funds_released_from_econfirm(transaction, external_status)
-        transaction.refresh_from_db()
-        return external_status, True
-    if (
-        transaction.status == Transaction.Status.PENDING_PAYMENT
-        and external_status
-        and econfirm_payload_is_funded(external_status)
-    ):
-        hold_funds(transaction)
-        transaction.refresh_from_db()
-        return external_status, True
-    return external_status, False
+    return reconcile_transaction_from_econfirm_payload(transaction, external_status)
 
 
 def sync_funds_from_econfirm(transaction):
@@ -141,8 +186,15 @@ def sync_funds_from_econfirm(transaction):
 
 @db_transaction.atomic
 def hold_funds(transaction):
-    now = timezone.now()
+    transaction.refresh_from_db()
     task = transaction.task
+    if transaction.status == Transaction.Status.ESCROWED:
+        if task.status != Task.Status.IN_PROGRESS:
+            task.status = Task.Status.IN_PROGRESS
+            task.save(update_fields=["status", "updated_at"])
+        return transaction
+
+    now = timezone.now()
 
     transaction.status = Transaction.Status.ESCROWED
     transaction.paid_at = now

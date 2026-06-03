@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from apps.notifications.models import Notification
 from apps.notifications.utils import send_notification
-from apps.payments.escrow import sync_funds_from_econfirm
+from apps.payments.escrow import sync_transaction_from_econfirm
 from apps.payments.models import Transaction
 
 from .models import Bid, Task, TaskCategory
@@ -278,13 +278,19 @@ class MarkTaskCompleteView(APIView):
             raise PermissionDenied("Only the assigned tasker can mark work complete.")
 
         transaction_obj = getattr(task, "transaction", None)
-        escrow_is_funded = transaction_obj and transaction_obj.status == Transaction.Status.ESCROWED
         external_status = None
-        if transaction_obj and transaction_obj.status == Transaction.Status.PENDING_PAYMENT:
-            external_status, escrow_is_funded = sync_funds_from_econfirm(transaction_obj)
-            if escrow_is_funded:
+        escrow_is_funded = transaction_obj and transaction_obj.status == Transaction.Status.ESCROWED
+        if transaction_obj and transaction_obj.status in {
+            Transaction.Status.PENDING_PAYMENT,
+            Transaction.Status.ESCROWED,
+        }:
+            external_status, synced = sync_transaction_from_econfirm(transaction_obj)
+            if synced:
                 task.refresh_from_db()
                 transaction_obj.refresh_from_db()
+            if transaction_obj.status == Transaction.Status.RELEASED:
+                raise ValidationError("Payment was already released for this task.")
+            escrow_is_funded = transaction_obj.status == Transaction.Status.ESCROWED
 
         if task.status == Task.Status.ASSIGNED and escrow_is_funded:
             task.status = Task.Status.IN_PROGRESS

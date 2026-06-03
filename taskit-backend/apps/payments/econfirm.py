@@ -174,7 +174,15 @@ class EconfirmClient:
                 timeout=30,
             )
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            if isinstance(payload, dict) and payload.get("success") is False:
+                logger.warning(
+                    "eConfirm status check rejected for %s: %s",
+                    econfirm_transaction_id,
+                    sanitize_for_logs(payload),
+                )
+                return None
+            return payload
         except requests.RequestException:
             logger.exception("eConfirm status check failed")
             return None

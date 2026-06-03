@@ -10,11 +10,6 @@ export const getPaymentStatus = async (taskId) => {
   return response.data
 }
 
-export const confirmEscrowFunded = async (taskId) => {
-  const response = await api.post(`/payments/confirm-funded/${taskId}/`)
-  return response.data
-}
-
 export const releasePayment = async (taskId) => {
   const response = await api.post(`/payments/release/${taskId}/`)
   return response.data

@@ -22,7 +22,7 @@ from .escrow import (
     hold_funds,
     econfirm_payload_is_funded,
     econfirm_payload_is_released,
-    mark_funds_released_from_econfirm,
+    reconcile_transaction_from_econfirm_payload,
     release_funds,
     sync_funds_from_econfirm,
     sync_transaction_from_econfirm,
@@ -213,17 +213,14 @@ class EconfirmCallbackView(APIView):
                 ]
             )
 
-            if econfirm_payload_is_funded(request.data):
-                if transaction.status == Transaction.Status.PENDING_PAYMENT:
-                    hold_funds(transaction)
+            if econfirm_payload_is_funded(request.data) or econfirm_payload_is_released(request.data):
+                reconcile_transaction_from_econfirm_payload(transaction, request.data)
             elif event_type in {"payment.failed", "escrow.failed"}:
                 transaction.status = Transaction.Status.PENDING_PAYMENT
                 transaction.save(update_fields=["status", "updated_at"])
             elif event_type == "funds.refunded" or econfirm_status == "refunded":
                 transaction.status = Transaction.Status.REFUNDED
                 transaction.save(update_fields=["status", "updated_at"])
-            elif econfirm_payload_is_released(request.data):
-                mark_funds_released_from_econfirm(transaction, request.data)
         except Exception:
             logger.exception("eConfirm callback processing failed")
             return Response({"status": "accepted"}, status=status.HTTP_200_OK)
@@ -254,8 +251,10 @@ class PaymentStatusView(APIView):
                 "paid_at": transaction.paid_at,
                 "amount": str(transaction.total_charged),
                 "task_status": task.status,
+                "tasker_completed_at": task.tasker_completed_at,
                 "provider": transaction.payment_provider,
                 "external_status": external_status,
+                "synced": synced,
             }
         )
 
@@ -285,10 +284,13 @@ class ConfirmEscrowFundedView(APIView):
                     }
                 )
             hold_funds(transaction)
+        transaction.refresh_from_db()
+        task = transaction.task
         return Response(
             {
                 "message": "Escrow funding confirmed. You can now release after the task is complete.",
-                "status": Transaction.Status.ESCROWED,
+                "status": transaction.status,
+                "task_status": task.status,
                 "external_status": external_status,
             }
         )
@@ -307,7 +309,10 @@ class ReleasePaymentView(APIView):
         if not transaction.task.tasker_completed_at:
             raise ValidationError("The tasker must mark the task complete before funds can be released.")
 
-        if transaction.status == Transaction.Status.PENDING_PAYMENT:
+        if transaction.status in {
+            Transaction.Status.PENDING_PAYMENT,
+            Transaction.Status.ESCROWED,
+        }:
             external_status, synced = sync_transaction_from_econfirm(transaction)
             if synced:
                 transaction.refresh_from_db()

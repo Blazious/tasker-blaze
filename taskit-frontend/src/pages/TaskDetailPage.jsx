@@ -71,12 +71,22 @@ function EscrowWorkflowCard({
   releaseMutation,
   task,
 }) {
-  const fundsHeld = ['ESCROWED', 'RELEASED'].includes(task.payment_status) || ['IN_PROGRESS', 'COMPLETED'].includes(task.status)
-  const workStarted = ['IN_PROGRESS', 'COMPLETED'].includes(task.status)
+  const paymentStatus = task.payment_status
+  const fundsHeld = paymentStatus === 'ESCROWED'
+    || paymentStatus === 'RELEASED'
+    || task.status === 'IN_PROGRESS'
+    || task.status === 'COMPLETED'
+  const workStarted = task.status === 'IN_PROGRESS' || task.status === 'COMPLETED'
   const taskerMarkedComplete = Boolean(task.tasker_completed_at) || task.status === 'COMPLETED'
-  const paymentReleased = task.payment_status === 'RELEASED' || task.status === 'COMPLETED'
-  const canMarkComplete = isTaskerAssigned && fundsHeld && !taskerMarkedComplete && !paymentReleased
-  const canApproveRelease = isClient && taskerMarkedComplete && !paymentReleased
+  const paymentReleased = paymentStatus === 'RELEASED' || task.status === 'COMPLETED'
+  const canMarkComplete = isTaskerAssigned
+    && (paymentStatus === 'ESCROWED' || task.status === 'IN_PROGRESS')
+    && !taskerMarkedComplete
+    && !paymentReleased
+  const canApproveRelease = isClient
+    && taskerMarkedComplete
+    && !paymentReleased
+    && (paymentStatus === 'ESCROWED' || task.status === 'IN_PROGRESS')
   const currentStepIndex = paymentReleased
     ? 3
     : taskerMarkedComplete
@@ -167,18 +177,12 @@ function EscrowWorkflowCard({
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
               <p className="font-semibold text-text-dark">Waiting for escrow funding</p>
-              <p className="text-text-muted">If the client has paid, TaskiT will verify escrow before sending completion to the client.</p>
+              <p className="text-text-muted">The client must fund escrow before you can mark the task complete.</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md border border-primary px-4 py-2 font-semibold text-primary disabled:opacity-70">
-                {checkPaymentMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
-                Check Escrow
-              </button>
-              <button type="button" onClick={() => markCompleteMutation.mutate()} disabled={markCompleteMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
-                {markCompleteMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                Mark Task Complete
-              </button>
-            </div>
+            <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md border border-primary px-4 py-2 font-semibold text-primary disabled:opacity-70">
+              {checkPaymentMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+              Check Escrow
+            </button>
           </div>
         )}
 
@@ -223,6 +227,12 @@ function EscrowWorkflowCard({
         {paymentReleased && (
           <p className="rounded-md bg-emerald-50 p-3 text-sm font-medium text-primary">
             Payment has been released. Reviews are now open for both sides.
+          </p>
+        )}
+
+        {import.meta.env.DEV && (
+          <p className="mt-3 rounded-md bg-slate-100 p-3 font-mono text-xs text-slate-700">
+            Workflow debug: task.status={task.status}, payment_status={paymentStatus ?? 'none'}, tasker_completed_at={task.tasker_completed_at ?? 'null'}
           </p>
         )}
       </div>
@@ -311,6 +321,7 @@ export default function TaskDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['notifications'] }),
       queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] }),
       queryClient.refetchQueries({ queryKey: ['task', taskId], exact: true }),
+      queryClient.refetchQueries({ queryKey: ['payment-status', taskId], exact: true }),
     ])
   }, [queryClient, taskId])
 
@@ -350,7 +361,7 @@ export default function TaskDetailPage() {
         setError('')
         refreshTaskWorkflow()
       } else if (data.status === 'ESCROWED') {
-        toast.success('Escrow funded. Release button is ready.')
+        toast.success('Escrow funded. The tasker can start work.')
         setError('')
         refreshTaskWorkflow()
       } else {

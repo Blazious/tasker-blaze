@@ -165,6 +165,149 @@ class PaymentTestCase(TestCase):
         with self.assertRaises(ValueError):
             release_funds(transaction)
 
+    @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
+    @patch("apps.payments.escrow.send_notification")
+    def test_payment_status_reconciles_wrapped_econfirm_payload(self, _mock_notify, mock_status):
+        mock_status.return_value = {
+            "success": True,
+            "data": {"status": "funds_held", "id": "txn_wrapped"},
+        }
+        transaction = self.create_transaction()
+        transaction.econfirm_transaction_id = "txn_wrapped"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.get(f"/api/v1/payments/status/{self.task.id}/")
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["synced"])
+        self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+
+    @override_settings(ECONFIRM_MOCK=True)
+    @patch("apps.payments.escrow.send_notification")
+    def test_payment_status_reconciles_funded_econfirm_into_local_db(self, _mock_notify):
+        transaction = self.create_transaction()
+        transaction.econfirm_transaction_id = "txn_status_sync"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.get(f"/api/v1/payments/status/{self.task.id}/")
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["synced"])
+        self.assertEqual(response.data["status"], Transaction.Status.ESCROWED)
+        self.assertEqual(response.data["task_status"], Task.Status.IN_PROGRESS)
+        self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
+        self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+
+    @override_settings(ECONFIRM_MOCK=True)
+    @patch("apps.payments.escrow.send_notification")
+    def test_mark_task_complete_sets_tasker_completed_at(self, _mock_notify):
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_mark_complete"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.save(update_fields=["status", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.tasker)
+
+        response = api_client.post(f"/api/v1/tasks/{self.task.id}/mark-complete/")
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(self.task.tasker_completed_at)
+        self.assertIsNotNone(response.data["tasker_completed_at"])
+
+    @override_settings(ECONFIRM_MOCK=True)
+    @patch("apps.payments.escrow.send_notification")
+    def test_client_release_endpoint_completes_task(self, _mock_notify):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["status", "tasker_completed_at", "updated_at"])
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_client_release"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.post(f"/api/v1/payments/release/{self.task.id}/")
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(transaction.status, Transaction.Status.RELEASED)
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+
+    @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
+    @patch("apps.payments.escrow.send_notification")
+    def test_payment_status_reconciles_manual_dashboard_release(self, _mock_notify, mock_status):
+        self.tasker.date_joined = timezone.now() - timedelta(days=20)
+        self.tasker.save(update_fields=["date_joined"])
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["status", "tasker_completed_at", "updated_at"])
+        mock_status.return_value = {"success": True, "data": {"status": "released"}}
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_manual_release"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.get(f"/api/v1/payments/status/{self.task.id}/")
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["synced"])
+        self.assertEqual(transaction.status, Transaction.Status.RELEASED)
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
+        self.assertTrue(PlatformFeeUsage.objects.filter(transaction=transaction).exists())
+
+    @override_settings(ECONFIRM_MOCK=True)
+    @patch("apps.payments.escrow.send_notification")
+    def test_review_after_completion_appears_on_tasker_profile(self, _mock_notify):
+        from apps.reviews.models import Review
+
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["status", "tasker_completed_at", "updated_at"])
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_review_flow"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+        api_client.post(f"/api/v1/payments/release/{self.task.id}/")
+        self.task.refresh_from_db()
+
+        api_client.force_authenticate(self.client_user)
+        review_response = api_client.post(
+            f"/api/v1/reviews/submit/{self.task.id}/",
+            {
+                "rating": 5,
+                "communication_rating": 5,
+                "punctuality_rating": 5,
+                "quality_rating": 5,
+                "comment": "Great laundry service",
+            },
+            format="json",
+        )
+        self.assertEqual(review_response.status_code, 201)
+
+        profile_response = api_client.get(f"/api/v1/profiles/{self.tasker.id}/")
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.data["completed_tasks_count"], 1)
+        self.assertEqual(len(profile_response.data["recent_reviews"]), 0)
+        Review.objects.filter(task=self.task).update(is_visible=True)
+        profile_response = api_client.get(f"/api/v1/profiles/{self.tasker.id}/")
+        self.assertEqual(profile_response.data["recent_reviews"][0]["comment"], "Great laundry service")
+
     @override_settings(ECONFIRM_MOCK=True)
     @patch("apps.payments.escrow.send_notification")
     def test_release_endpoint_syncs_funded_econfirm_before_release(self, _mock_notify):
