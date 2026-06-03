@@ -10,7 +10,7 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { acceptBid, getTask, getTaskBids, markTaskComplete, placeBid, rejectBid } from '../api/tasks.js'
-import { confirmEscrowFunded, disputePayment, getPaymentStatus, initiatePayment, releasePayment } from '../api/payments.js'
+import { disputePayment, getPaymentStatus, initiatePayment, releasePayment } from '../api/payments.js'
 import { activateTasker, getMe } from '../api/auth.js'
 import { submitReview } from '../api/reviews.js'
 import { getUserProfile } from '../api/reviews.js'
@@ -62,7 +62,6 @@ function RatingInput({ label, value, onChange }) {
 function EscrowWorkflowCard({
   acceptedBid,
   checkPaymentMutation,
-  confirmFundedMutation,
   isClient,
   isPaymentPending,
   isTaskerAssigned,
@@ -150,7 +149,7 @@ function EscrowWorkflowCard({
                   <button type="button" onClick={onOpenPayment} disabled={paymentMutation.isPending} className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold text-text-dark disabled:opacity-60">
                     Retry STK
                   </button>
-                  <button type="button" onClick={() => confirmFundedMutation.mutate()} disabled={confirmFundedMutation.isPending} className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
+                  <button type="button" onClick={() => checkPaymentMutation.mutate()} disabled={checkPaymentMutation.isPending} className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:opacity-60">
                     I Already Paid
                   </button>
                 </>
@@ -362,21 +361,6 @@ export default function TaskDetailPage() {
     },
     onError: (mutationError) => {
       const message = getApiErrorMessage(mutationError, 'Could not check payment status.')
-      setError(message)
-      toast.error(message)
-    },
-  })
-
-  const confirmFundedMutation = useMutation({
-    mutationFn: () => confirmEscrowFunded(taskId),
-    onSuccess: (data) => {
-      console.log('TaskiT confirm escrow response:', data)
-      toast.success('Escrow confirmed. Release button is ready.')
-      setError('')
-      refreshTaskWorkflow()
-    },
-    onError: (mutationError) => {
-      const message = getApiErrorMessage(mutationError, 'Could not confirm escrow funding.')
       setError(message)
       toast.error(message)
     },
@@ -670,7 +654,6 @@ export default function TaskDetailPage() {
         <EscrowWorkflowCard
           acceptedBid={acceptedBid}
           checkPaymentMutation={checkPaymentMutation}
-          confirmFundedMutation={confirmFundedMutation}
           isClient={isClient}
           isPaymentPending={task.payment_status === 'PENDING_PAYMENT'}
           isTaskerAssigned={isAssignedTasker}
