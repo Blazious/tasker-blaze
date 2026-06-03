@@ -1,5 +1,6 @@
 import logging
 import re
+from json import JSONDecodeError
 
 import requests
 from django.conf import settings
@@ -226,9 +227,41 @@ class EconfirmClient:
                 raise ValidationError(f"{error_message}: {message}")
             return data
         except requests.RequestException as exc:
-            logger.exception("eConfirm API error on %s", path)
             response = getattr(exc, "response", None)
-            details = ""
-            if response is not None:
-                details = f" - {response.text[:500]}"
+            details = self._response_error_details(response)
+            logger.exception(
+                "eConfirm API error on %s details=%s payload=%s",
+                path,
+                details,
+                sanitize_for_logs(payload),
+            )
             raise ValidationError(f"{error_message}: {exc}{details}") from exc
+
+    def _response_error_details(self, response):
+        if response is None:
+            return ""
+
+        try:
+            body = response.json()
+        except (ValueError, JSONDecodeError):
+            body = response.text[:1000].strip()
+
+        trace_headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower()
+            in {
+                "x-request-id",
+                "x-correlation-id",
+                "x-trace-id",
+                "cf-ray",
+                "date",
+                "server",
+            }
+        }
+        details = {
+            "status_code": response.status_code,
+            "body": sanitize_for_logs(body),
+            "headers": sanitize_for_logs(trace_headers),
+        }
+        return f" - {details}"
