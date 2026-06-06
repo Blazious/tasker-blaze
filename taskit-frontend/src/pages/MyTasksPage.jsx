@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Archive, CheckCircle2, Clock3, Loader2 } from 'lucide-react'
 import { forgetTask, getMyAssignments, getMyTasks } from '../api/tasks.js'
-import { releasePayment } from '../api/payments.js'
-import { getApiErrorMessage } from '../utils/apiError.js'
 
 const statusStyles = {
   OPEN: 'bg-blue-100 text-blue-700',
@@ -40,7 +38,7 @@ function getTaskApprovalState(task, listType) {
   }
 }
 
-function TaskList({ tasks, listType, onForget, forgettingId, onRelease, releasingId }) {
+function TaskList({ tasks, listType, onForget, forgettingId }) {
   const navigate = useNavigate()
   if (!tasks.length) return <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-text-muted">No tasks here yet.</p>
   return (
@@ -86,13 +84,12 @@ function TaskList({ tasks, listType, onForget, forgettingId, onRelease, releasin
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation()
-                      onRelease(task.id)
+                      navigate(`/tasks/${task.id}`)
                     }}
-                    disabled={releasingId === task.id}
                     className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white"
                   >
-                    {releasingId === task.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                    Approve & Release
+                    <CheckCircle2 size={15} />
+                    Review & Release
                   </button>
                 )}
                 <button
@@ -127,23 +124,9 @@ function sortTasksForList(tasks, listType) {
 
 export default function MyTasksPage() {
   const [tab, setTab] = useState('posted')
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const postedQuery = useQuery({ queryKey: ['my-tasks'], queryFn: getMyTasks })
   const assignmentsQuery = useQuery({ queryKey: ['my-assignments'], queryFn: getMyAssignments })
-  const releaseMutation = useMutation({
-    mutationFn: releasePayment,
-    onSuccess: (_data, taskId) => {
-      toast.success('Payment released. You can now leave a review.')
-      queryClient.invalidateQueries({ queryKey: ['my-tasks'] })
-      queryClient.invalidateQueries({ queryKey: ['my-assignments'] })
-      queryClient.invalidateQueries({ queryKey: ['auth-stats'] })
-      navigate(`/tasks/${taskId}`)
-    },
-    onError: (error) => {
-      toast.error(getApiErrorMessage(error, 'Could not release payment.'))
-    },
-  })
   const forgetMutation = useMutation({
     mutationFn: forgetTask,
     onSuccess: () => {
@@ -173,8 +156,6 @@ export default function MyTasksPage() {
           listType={tab}
           onForget={(taskId) => forgetMutation.mutate(taskId)}
           forgettingId={forgetMutation.variables}
-          onRelease={(taskId) => releaseMutation.mutate(taskId)}
-          releasingId={releaseMutation.variables}
         />
       )}
     </section>

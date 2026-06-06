@@ -66,27 +66,26 @@ function EscrowWorkflowCard({
   isPaymentPending,
   isTaskerAssigned,
   markCompleteMutation,
+  onOpenReviewRelease,
   onOpenPayment,
   paymentMutation,
   releaseMutation,
   task,
 }) {
   const paymentStatus = task.payment_status
-  const fundsHeld = paymentStatus === 'ESCROWED'
-    || paymentStatus === 'RELEASED'
-    || task.status === 'IN_PROGRESS'
-    || task.status === 'COMPLETED'
+  const escrowFunded = paymentStatus === 'ESCROWED' || paymentStatus === 'RELEASED'
+  const fundsHeld = escrowFunded || task.status === 'IN_PROGRESS' || task.status === 'COMPLETED'
   const workStarted = task.status === 'IN_PROGRESS' || task.status === 'COMPLETED'
   const taskerMarkedComplete = Boolean(task.tasker_completed_at) || task.status === 'COMPLETED'
   const paymentReleased = paymentStatus === 'RELEASED' || task.status === 'COMPLETED'
   const canMarkComplete = isTaskerAssigned
-    && (paymentStatus === 'ESCROWED' || task.status === 'IN_PROGRESS')
+    && escrowFunded
     && !taskerMarkedComplete
     && !paymentReleased
   const canApproveRelease = isClient
     && taskerMarkedComplete
     && !paymentReleased
-    && (paymentStatus === 'ESCROWED' || task.status === 'IN_PROGRESS')
+    && escrowFunded
   const currentStepIndex = paymentReleased
     ? 3
     : taskerMarkedComplete
@@ -215,9 +214,9 @@ function EscrowWorkflowCard({
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
               <p className="font-semibold text-text-dark">Tasker says the work is complete</p>
-              <p className="text-text-muted">Review the work, then approve release if everything is okay. Rating opens immediately after release.</p>
+              <p className="text-text-muted">Leave a review, then approve release. TaskiT uses this to track tasker quality and billing.</p>
             </div>
-            <button type="button" onClick={() => releaseMutation.mutate()} disabled={releaseMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
+            <button type="button" onClick={onOpenReviewRelease} disabled={releaseMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
               {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
               Approve & Release
             </button>
@@ -265,6 +264,7 @@ export default function TaskDetailPage() {
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
   const [paymentPollingUntil, setPaymentPollingUntil] = useState(0)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [isReviewReleaseModalOpen, setIsReviewReleaseModalOpen] = useState(false)
 
   const taskQuery = useQuery({
     queryKey: ['task', taskId],
@@ -460,21 +460,48 @@ export default function TaskDetailPage() {
     onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not initiate payment.')),
   })
 
+  const buildReviewPayload = useCallback(() => {
+    const rating = Math.round(
+      (
+        reviewForm.communication_rating
+        + reviewForm.punctuality_rating
+        + reviewForm.quality_rating
+      ) / 3,
+    )
+    return { ...reviewForm, rating, comment: reviewForm.comment.trim() }
+  }, [reviewForm])
+
   const releaseMutation = useMutation({
-    mutationFn: () => releasePayment(taskId),
+    mutationFn: async () => {
+      if (isClient && !reviewForm.comment.trim()) {
+        throw new Error('Please leave a short review before approving release.')
+      }
+      const releaseResponse = await releasePayment(taskId)
+      if (isClient) {
+        const reviewResponse = await submitReview(taskId, buildReviewPayload())
+        return { releaseResponse, reviewResponse }
+      }
+      return { releaseResponse }
+    },
     onSuccess: (data) => {
       console.log('TaskiT release response:', data)
-      toast.success('Payment released. You can now leave a review.')
-      setReviewSubmitted(false)
+      toast.success(isClient ? 'Payment released and review submitted.' : 'Payment released. You can now leave a review.')
+      setReviewSubmitted(Boolean(isClient))
+      setIsReviewReleaseModalOpen(false)
       refreshTaskWorkflow()
     },
-    onError: (mutationError) => setError(getApiErrorMessage(mutationError, 'Could not release payment.')),
+    onError: (mutationError) => {
+      const message = getApiErrorMessage(mutationError, mutationError.message || 'Could not release payment.')
+      setError(message)
+      toast.error(message)
+    },
   })
 
   const markCompleteMutation = useMutation({
     mutationFn: async () => {
       const paymentSync = await getPaymentStatus(taskId)
       console.log('TaskiT pre-completion escrow sync response:', paymentSync)
+      console.log('TaskiT tasker clicked Mark Task Complete:', { taskId, paymentStatus: paymentSync.status })
       return markTaskComplete(taskId)
     },
     onSuccess: (data) => {
@@ -494,16 +521,7 @@ export default function TaskDetailPage() {
   })
 
   const reviewMutation = useMutation({
-    mutationFn: () => {
-      const rating = Math.round(
-        (
-          reviewForm.communication_rating
-          + reviewForm.punctuality_rating
-          + reviewForm.quality_rating
-        ) / 3,
-      )
-      return submitReview(taskId, { ...reviewForm, rating })
-    },
+    mutationFn: () => submitReview(taskId, buildReviewPayload()),
     onSuccess: () => {
       toast.success('Review submitted')
       setReviewSubmitted(true)
@@ -673,6 +691,7 @@ export default function TaskDetailPage() {
           isPaymentPending={task.payment_status === 'PENDING_PAYMENT'}
           isTaskerAssigned={isAssignedTasker}
           markCompleteMutation={markCompleteMutation}
+          onOpenReviewRelease={() => setIsReviewReleaseModalOpen(true)}
           onOpenPayment={() => setIsPaymentModalOpen(true)}
           paymentMutation={paymentMutation}
           releaseMutation={releaseMutation}
@@ -849,6 +868,59 @@ export default function TaskDetailPage() {
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" onClick={() => setIsDisputeOpen(false)} className="rounded-md border border-slate-300 px-4 py-2 font-medium">Cancel</button>
               <button type="button" onClick={() => disputeMutation.mutate()} className="rounded-md bg-red-600 px-4 py-2 font-semibold text-white">Submit Report</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isReviewReleaseModalOpen && isClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-primary">
+                <Star size={22} />
+              </span>
+              <div>
+                <h2 className="text-xl font-semibold text-text-dark">Review before release</h2>
+                <p className="mt-1 text-sm text-text-muted">
+                  Your review is required before TaskiT releases escrow and records the billing event.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+              {reviewRatingFields.map((field) => (
+                <RatingInput
+                  key={field.key}
+                  label={field.label}
+                  value={reviewForm[field.key]}
+                  onChange={(rating) => setReviewForm((current) => ({ ...current, [field.key]: rating }))}
+                />
+              ))}
+            </div>
+
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-text-dark">Review</span>
+              <textarea
+                value={reviewForm.comment}
+                onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))}
+                maxLength={500}
+                rows={4}
+                placeholder="Write a short review"
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2"
+              />
+            </label>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => releaseMutation.mutate()}
+                disabled={releaseMutation.isPending || !reviewForm.comment.trim()}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
+              >
+                {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                Submit Review & Release
+              </button>
             </div>
           </div>
         </div>
