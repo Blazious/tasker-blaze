@@ -3,7 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -32,6 +32,23 @@ from .models import DisputeNote, PlatformFeeUsage, PlatformInvoice, PlatformInvo
 from .serializers import AdminPlatformInvoiceSerializer, DisputeCreateSerializer, TransactionSerializer
 
 logger = logging.getLogger(__name__)
+
+
+def _nested_dict(payload, key):
+    value = payload.get(key) if isinstance(payload, dict) else None
+    return value if isinstance(value, dict) else {}
+
+
+def _first_payload_value(payload, *keys):
+    if not isinstance(payload, dict):
+        return ""
+    containers = (payload, _nested_dict(payload, "data"), _nested_dict(payload, "callback"))
+    for container in containers:
+        for key in keys:
+            value = container.get(key)
+            if value not in (None, ""):
+                return str(value)
+    return ""
 
 
 class PaymentsHealthView(APIView):
@@ -164,30 +181,34 @@ class EconfirmCallbackView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        event_type = request.data.get("event", "")
-        econfirm_transaction_id = (
-            request.data.get("transaction_id")
-            or request.data.get("econfirm_transaction_id")
-            or request.data.get("id")
-            or request.data.get("data", {}).get("id")
-            or ""
+        payload = request.data
+        event_type = _first_payload_value(payload, "event", "event_type", "type")
+        econfirm_transaction_id = _first_payload_value(
+            payload,
+            "transaction_id",
+            "econfirm_transaction_id",
+            "escrow_id",
+            "id",
         )
-        econfirm_status = (
-            request.data.get("status")
-            or request.data.get("data", {}).get("status")
-            or ""
+        econfirm_status = _first_payload_value(
+            payload,
+            "status",
+            "state",
+            "payment_status",
+            "escrow_status",
         )
         internal_transaction_id = (
-            request.data.get("metadata", {}).get("transaction_id")
-            if isinstance(request.data.get("metadata"), dict)
-            else request.data.get("transaction_reference", "")
+            payload.get("metadata", {}).get("transaction_id")
+            if isinstance(payload.get("metadata"), dict)
+            else payload.get("transaction_reference", "")
         )
 
         try:
             transaction = None
             if econfirm_transaction_id:
                 transaction = Transaction.objects.select_related("task").filter(
-                    econfirm_transaction_id=econfirm_transaction_id
+                    Q(econfirm_transaction_id=econfirm_transaction_id)
+                    | Q(econfirm_checkout_request_id=econfirm_transaction_id)
                 ).first()
             if transaction is None and internal_transaction_id:
                 transaction = Transaction.objects.select_related("task").filter(
@@ -197,8 +218,17 @@ class EconfirmCallbackView(APIView):
             if transaction is None:
                 return Response({"error": "Transaction not found"}, status=404)
 
-            mpesa_receipt = request.data.get("mpesa_receipt") or request.data.get("mpesa_receipt_number") or ""
-            payment_method = request.data.get("payment_method") or request.data.get("data", {}).get("payment_method") or ""
+            mpesa_receipt = _first_payload_value(
+                payload,
+                "confirmation_code",
+                "mpesa_confirmation_code",
+                "mpesa_receipt",
+                "mpesa_receipt_number",
+                "receipt",
+                "provider_reference",
+                "payment_reference",
+            )
+            payment_method = _first_payload_value(payload, "payment_method", "method")
             if mpesa_receipt:
                 transaction.mpesa_receipt_number = mpesa_receipt
             if payment_method:
@@ -213,8 +243,8 @@ class EconfirmCallbackView(APIView):
                 ]
             )
 
-            if econfirm_payload_is_funded(request.data) or econfirm_payload_is_released(request.data):
-                reconcile_transaction_from_econfirm_payload(transaction, request.data)
+            if econfirm_payload_is_funded(payload) or econfirm_payload_is_released(payload):
+                reconcile_transaction_from_econfirm_payload(transaction, payload)
             elif event_type in {"payment.failed", "escrow.failed"}:
                 transaction.status = Transaction.Status.PENDING_PAYMENT
                 transaction.save(update_fields=["status", "updated_at"])
@@ -322,7 +352,8 @@ class ReleasePaymentView(APIView):
         if transaction.status != Transaction.Status.ESCROWED:
             raise ValidationError("Escrow is not funded yet, so funds cannot be released.")
 
-        release_funds(transaction)
+        confirmation_code = request.data.get("confirmation_code") or request.data.get("mpesa_receipt_number") or ""
+        release_funds(transaction, confirmation_code=confirmation_code)
         return Response({"message": "Payment released. Great job!"})
 
 

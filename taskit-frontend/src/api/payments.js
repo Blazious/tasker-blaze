@@ -10,8 +10,8 @@ export const getPaymentStatus = async (taskId) => {
   return response.data
 }
 
-export const releasePayment = async (taskId) => {
-  const response = await api.post(`/payments/release/${taskId}/`)
+export const releasePayment = async (taskId, data = {}) => {
+  const response = await api.post(`/payments/release/${taskId}/`, data)
   return response.data
 }
 

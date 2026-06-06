@@ -61,6 +61,15 @@ STATUS_FIELD_KEYS = {
     "payment_state",
     "escrow_state",
 }
+CONFIRMATION_FIELD_KEYS = {
+    "confirmation_code",
+    "mpesa_confirmation_code",
+    "mpesa_receipt",
+    "mpesa_receipt_number",
+    "receipt",
+    "provider_reference",
+    "payment_reference",
+}
 
 
 def _collect_external_values(payload, keys):
@@ -74,6 +83,11 @@ def _collect_external_values(payload, keys):
         for item in payload:
             values.extend(_collect_external_values(item, keys))
     return values
+
+
+def _first_external_value(payload, keys):
+    values = _collect_external_values(payload, keys)
+    return values[0] if values else ""
 
 
 def _normalize_external_value(value):
@@ -149,6 +163,12 @@ def reconcile_transaction_from_econfirm_payload(transaction, payload):
         return payload, False
 
     payload = unwrap_econfirm_payload(payload)
+    confirmation_code = _first_external_value(payload, CONFIRMATION_FIELD_KEYS)
+    if confirmation_code and not transaction.mpesa_receipt_number:
+        transaction.mpesa_receipt_number = confirmation_code
+        transaction.payment_provider = "ECONFIRM"
+        transaction.save(update_fields=["mpesa_receipt_number", "payment_provider", "updated_at"])
+
     if econfirm_payload_is_released(payload):
         mark_funds_released_from_econfirm(transaction, payload)
         transaction.refresh_from_db()
@@ -264,12 +284,16 @@ def mark_funds_released_from_econfirm(transaction, payload=None):
 
 
 @db_transaction.atomic
-def release_funds(transaction):
+def release_funds(transaction, confirmation_code=None):
     if transaction.status != Transaction.Status.ESCROWED:
         raise ValueError("Only escrowed transactions can be released.")
 
+    if confirmation_code and not transaction.mpesa_receipt_number:
+        transaction.mpesa_receipt_number = confirmation_code
+        transaction.save(update_fields=["mpesa_receipt_number", "updated_at"])
+
     if transaction.econfirm_transaction_id:
-        EconfirmClient().release_funds(transaction)
+        EconfirmClient().release_funds(transaction, confirmation_code=confirmation_code)
 
     now = timezone.now()
     task = transaction.task

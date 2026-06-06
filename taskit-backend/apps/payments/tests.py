@@ -11,7 +11,7 @@ from apps.tasks.models import Bid, Task, TaskCategory
 
 from .billing import generate_invoice_for_month, overdue_balance
 from .escrow import hold_funds, release_funds
-from .econfirm import normalize_kenyan_phone, validate_kenyan_mobile
+from .econfirm import EconfirmClient, normalize_kenyan_phone, validate_kenyan_mobile
 from .models import EscrowLedger, PlatformFeeUsage, PlatformInvoice, Transaction
 
 
@@ -77,6 +77,38 @@ class PaymentTestCase(TestCase):
     def test_phone_validation_rejects_bad_receiver_phone(self):
         with self.assertRaises(Exception):
             validate_kenyan_mobile("2541124727432", "Tasker")
+
+    @override_settings(ECONFIRM_MOCK=False, ECONFIRM_API_KEY="test-key")
+    def test_econfirm_create_escrow_accepts_transaction_id_response(self):
+        transaction = self.create_transaction()
+        client = EconfirmClient()
+
+        with patch.object(client, "_post") as mock_post:
+            mock_post.return_value = {
+                "success": True,
+                "data": {"transaction_id": "txn_from_provider", "status": "pending"},
+            }
+
+            client.create_escrow(transaction, "TaskiT payment")
+
+        transaction.refresh_from_db()
+        self.assertEqual(transaction.econfirm_transaction_id, "txn_from_provider")
+        self.assertEqual(transaction.econfirm_checkout_request_id, "txn_from_provider")
+
+    @override_settings(ECONFIRM_MOCK=False, ECONFIRM_API_KEY="test-key")
+    def test_econfirm_stk_push_stores_returned_tracking_id(self):
+        transaction = self.create_transaction()
+        transaction.econfirm_transaction_id = "txn_created"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        client = EconfirmClient()
+
+        with patch.object(client, "_post") as mock_post:
+            mock_post.return_value = {"transaction_id": "stk_tracking_id"}
+
+            client.initiate_stk_push(transaction)
+
+        transaction.refresh_from_db()
+        self.assertEqual(transaction.econfirm_checkout_request_id, "stk_tracking_id")
 
     @patch("apps.payments.escrow.send_notification")
     def test_hold_funds_sets_transaction_and_task_statuses(self, _mock_notify):
@@ -360,6 +392,38 @@ class PaymentTestCase(TestCase):
         self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
         self.assertEqual(transaction.mpesa_receipt_number, "RCP123")
         self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
+
+    @patch("apps.payments.escrow.send_notification")
+    def test_econfirm_callback_matches_checkout_id_and_nested_confirmation_code(self, _mock_notify):
+        transaction = self.create_transaction()
+        transaction.econfirm_transaction_id = "txn_created_123"
+        transaction.econfirm_checkout_request_id = "stk_tracking_123"
+        transaction.save(
+            update_fields=[
+                "econfirm_transaction_id",
+                "econfirm_checkout_request_id",
+                "updated_at",
+            ]
+        )
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/payments/econfirm-callback/",
+            {
+                "data": {
+                    "transaction_id": "stk_tracking_123",
+                    "payment_status": "paid",
+                    "confirmation_code": "QCP456",
+                    "payment_method": "Mpesa",
+                }
+            },
+            format="json",
+        )
+        transaction.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
+        self.assertEqual(transaction.mpesa_receipt_number, "QCP456")
 
     @patch("apps.payments.escrow.send_notification")
     def test_econfirm_callback_reconciles_manual_release_and_tracks_billing(self, _mock_notify):

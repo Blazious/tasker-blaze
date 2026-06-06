@@ -65,6 +65,13 @@ def validate_kenyan_mobile(phone_number, label):
     return normalized
 
 
+def first_present(*values):
+    for value in values:
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
 class EconfirmClient:
     def __init__(self):
         self.api_key = settings.ECONFIRM_API_KEY
@@ -135,8 +142,16 @@ class EconfirmClient:
         response = self._post("/transactions", payload, "Failed to create eConfirm escrow")
         data = response.get("data", response)
 
-        transaction.econfirm_transaction_id = data.get("id", "")
-        transaction.econfirm_checkout_request_id = data.get("checkout_request_id", "")
+        transaction_id = first_present(data.get("id"), data.get("transaction_id"))
+        checkout_request_id = first_present(
+            data.get("checkout_request_id"),
+            data.get("checkout_id"),
+            data.get("transaction_id"),
+            transaction_id,
+        )
+
+        transaction.econfirm_transaction_id = transaction_id
+        transaction.econfirm_checkout_request_id = checkout_request_id
         transaction.payment_provider = "ECONFIRM"
         transaction.save(
             update_fields=[
@@ -162,7 +177,18 @@ class EconfirmClient:
             "transaction_id": transaction.econfirm_transaction_id,
             "payer_phone": validate_kenyan_mobile(transaction.client.phone_number, "Your profile"),
         }
-        return self._post("/payments/stk-push", payload, "Failed to initiate eConfirm STK push")
+        response = self._post("/payments/stk-push", payload, "Failed to initiate eConfirm STK push")
+        data = response.get("data", response)
+        checkout_request_id = first_present(
+            data.get("checkout_request_id"),
+            data.get("checkout_id"),
+            data.get("transaction_id"),
+            data.get("id"),
+        )
+        if checkout_request_id and checkout_request_id != transaction.econfirm_checkout_request_id:
+            transaction.econfirm_checkout_request_id = checkout_request_id
+            transaction.save(update_fields=["econfirm_checkout_request_id", "updated_at"])
+        return response
 
     def check_transaction_status(self, econfirm_transaction_id):
         if self.mock:
@@ -187,13 +213,20 @@ class EconfirmClient:
             logger.exception("eConfirm status check failed")
             return None
 
-    def release_funds(self, transaction):
+    def release_funds(self, transaction, confirmation_code=None):
         if self.mock:
             logger.info("MOCK: eConfirm release skipped for transaction %s", transaction.id)
             return {"status": "released"}
 
+        confirmation_code = confirmation_code or transaction.mpesa_receipt_number
+        if not confirmation_code:
+            raise ValidationError(
+                "eConfirm needs the M-Pesa/eConfirm confirmation code before funds can be released. "
+                "Wait for the payment callback to sync, or enter the code from the payment SMS."
+            )
+
         payload = {
-            "confirmation_code": f"TASKIT-{transaction.task_id}-{transaction.id}",
+            "confirmation_code": confirmation_code,
             "notes": (
                 "Client confirmed completion in TaskiT. "
                 "eConfirm releases to the seller configured on the escrow transaction."
