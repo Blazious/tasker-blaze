@@ -91,6 +91,11 @@ class PaymentTestCase(TestCase):
 
             client.create_escrow(transaction, "TaskiT payment")
 
+        payload = mock_post.call_args.args[1]
+        self.assertEqual(payload["receiver_phone"], "254700000002")
+        self.assertNotIn("buyer_phone", payload)
+        self.assertNotIn("seller_phone", payload)
+        self.assertNotIn("recipient_phone", payload)
         transaction.refresh_from_db()
         self.assertEqual(transaction.econfirm_transaction_id, "txn_from_provider")
         self.assertEqual(transaction.econfirm_checkout_request_id, "txn_from_provider")

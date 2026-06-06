@@ -119,18 +119,17 @@ class EconfirmClient:
                 },
             }
 
-        buyer_phone = validate_kenyan_mobile(transaction.client.phone_number, "Your profile")
+        validate_kenyan_mobile(transaction.client.phone_number, "Your profile")
         seller_phone = validate_kenyan_mobile(transaction.tasker.phone_number, "The accepted tasker profile")
 
         # eConfirm v1 creates a principal escrow amount. TaskiT tracks the
         # platform fee post-paid, so the client funds only the agreed task amount.
+        # Keep this payload aligned with eConfirm's escrow transaction schema;
+        # payer phone belongs to the follow-up STK push call.
         payload = {
             "buyer_email": transaction.client.email,
             "seller_email": transaction.tasker.email,
-            "buyer_phone": buyer_phone,
-            "seller_phone": seller_phone,
             "receiver_phone": seller_phone,
-            "recipient_phone": seller_phone,
             "amount": float(transaction.agreed_amount),
             "currency": "KES",
             "description": description[:100],
