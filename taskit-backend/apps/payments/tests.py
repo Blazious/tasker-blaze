@@ -92,7 +92,7 @@ class PaymentTestCase(TestCase):
             client.create_escrow(transaction, "TaskiT payment")
 
         payload = mock_post.call_args.args[1]
-        self.assertNotIn("receiver_phone", payload)
+        self.assertEqual(payload["receiver_phone"], "254700000002")
         self.assertNotIn("buyer_phone", payload)
         self.assertNotIn("seller_phone", payload)
         self.assertNotIn("recipient_phone", payload)
