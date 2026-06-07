@@ -163,11 +163,13 @@ def reconcile_transaction_from_econfirm_payload(transaction, payload):
         return payload, False
 
     payload = unwrap_econfirm_payload(payload)
+    changed = False
     confirmation_code = _first_external_value(payload, CONFIRMATION_FIELD_KEYS)
     if confirmation_code and not transaction.mpesa_receipt_number:
         transaction.mpesa_receipt_number = confirmation_code
         transaction.payment_provider = "ECONFIRM"
         transaction.save(update_fields=["mpesa_receipt_number", "payment_provider", "updated_at"])
+        changed = True
 
     if econfirm_payload_is_released(payload):
         mark_funds_released_from_econfirm(transaction, payload)
@@ -180,7 +182,7 @@ def reconcile_transaction_from_econfirm_payload(transaction, payload):
         hold_funds(transaction)
         transaction.refresh_from_db()
         return payload, True
-    return payload, False
+    return payload, changed
 
 
 def sync_transaction_from_econfirm(transaction):

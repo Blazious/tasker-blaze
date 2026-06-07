@@ -282,6 +282,41 @@ class PaymentTestCase(TestCase):
         self.assertEqual(transaction.status, Transaction.Status.RELEASED)
         self.assertEqual(self.task.status, Task.Status.COMPLETED)
 
+    @patch("apps.payments.econfirm.EconfirmClient.release_funds")
+    @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
+    @patch("apps.payments.escrow.send_notification")
+    def test_release_endpoint_uses_confirmation_code_synced_from_econfirm_status(
+        self,
+        _mock_notify,
+        mock_status,
+        mock_release,
+    ):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["status", "tasker_completed_at", "updated_at"])
+        mock_status.return_value = {
+            "success": True,
+            "data": {
+                "status": "held",
+                "confirmation_code": "UF7I66W2OT",
+            },
+        }
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_release_with_synced_code"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.post(f"/api/v1/payments/release/{self.task.id}/")
+        transaction.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(transaction.mpesa_receipt_number, "UF7I66W2OT")
+        mock_release.assert_called_once()
+        self.assertEqual(mock_release.call_args.kwargs["confirmation_code"], "")
+        released_transaction = mock_release.call_args.args[0]
+        self.assertEqual(released_transaction.mpesa_receipt_number, "UF7I66W2OT")
+
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
     def test_payment_status_reconciles_manual_dashboard_release(self, _mock_notify, mock_status):

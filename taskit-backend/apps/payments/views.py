@@ -344,8 +344,9 @@ class ReleasePaymentView(APIView):
             Transaction.Status.ESCROWED,
         }:
             external_status, synced = sync_transaction_from_econfirm(transaction)
-            if synced:
+            if external_status:
                 transaction.refresh_from_db()
+            if synced:
                 if transaction.status == Transaction.Status.RELEASED:
                     return Response({"message": "Payment release synced. Reviews are now open."})
 
