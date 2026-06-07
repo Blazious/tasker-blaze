@@ -217,20 +217,16 @@ class EconfirmClient:
             logger.info("MOCK: eConfirm release skipped for transaction %s", transaction.id)
             return {"status": "released"}
 
-        confirmation_code = confirmation_code or transaction.mpesa_receipt_number
-        if not confirmation_code:
-            raise ValidationError(
-                "eConfirm needs the M-Pesa/eConfirm confirmation code before funds can be released. "
-                "Wait for the payment callback to sync, or enter the code from the payment SMS."
-            )
-
         payload = {
-            "confirmation_code": confirmation_code,
             "notes": (
                 "Client confirmed completion in TaskiT. "
                 "eConfirm releases to the seller configured on the escrow transaction."
             ),
         }
+        confirmation_code = confirmation_code or transaction.mpesa_receipt_number
+        if confirmation_code:
+            payload["confirmation_code"] = confirmation_code
+
         return self._post(
             f"/transactions/{transaction.econfirm_transaction_id}/release",
             payload,
