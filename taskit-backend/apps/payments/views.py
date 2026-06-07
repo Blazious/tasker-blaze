@@ -346,7 +346,7 @@ class ReleasePaymentView(APIView):
                     {
                         "message": (
                             "eConfirm needs the payment confirmation code before release. "
-                            "Use the M-Pesa receipt from your STK payment SMS, or the code shown in eConfirm."
+                            "Use the release confirmation code shown in eConfirm. If eConfirm shows none, try the M-Pesa receipt from the funding SMS."
                         ),
                         "requires_confirmation_code": True,
                     }
@@ -356,8 +356,8 @@ class ReleasePaymentView(APIView):
                     {
                         "message": (
                             "eConfirm rejected that confirmation code. "
-                            "Use the M-Pesa receipt from your payment SMS (not the escrow transaction ID). "
-                            "If you already paid, open the M-Pesa message and copy the receipt code exactly."
+                            "Use the release confirmation code shown in eConfirm, not the escrow transaction ID. "
+                            "If eConfirm shows no separate code, confirm with their support which code this escrow expects."
                         ),
                         "requires_confirmation_code": True,
                     }

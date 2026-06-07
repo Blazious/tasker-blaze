@@ -499,7 +499,7 @@ export default function TaskDetailPage() {
     onError: (mutationError) => {
       if (mutationError?.response?.data?.requires_confirmation_code) {
         setReleaseNeedsConfirmationCode(true)
-        const message = mutationError.response.data.message || 'Enter the M-Pesa confirmation code to release this escrow.'
+        const message = mutationError.response.data.message || 'Enter the eConfirm release confirmation code to release this escrow.'
         setError(message)
         toast.error(message)
         return
@@ -937,26 +937,28 @@ export default function TaskDetailPage() {
               />
             </label>
 
-            <label className="mt-4 block">
-              <span className="text-sm font-semibold text-text-dark">Payment confirmation code</span>
-              <p className="mt-1 text-xs text-text-muted">
-                Use the M-Pesa receipt from your STK payment SMS (for example TH12ABC3DE4). If release fails, do not use the escrow transaction ID.
-              </p>
-              <input
-                type="text"
-                value={releaseConfirmationCode}
-                onChange={(event) => setReleaseConfirmationCode(event.target.value.toUpperCase())}
-                autoCapitalize="characters"
-                placeholder="M-Pesa receipt from payment SMS"
-                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 uppercase"
-              />
-            </label>
+            {releaseNeedsConfirmationCode && (
+              <label className="mt-4 block">
+                <span className="text-sm font-semibold text-text-dark">eConfirm release confirmation code</span>
+                <p className="mt-1 text-xs text-text-muted">
+                  Use the code shown on the eConfirm transaction page. If none is shown, try the M-Pesa receipt from the funding SMS.
+                </p>
+                <input
+                  type="text"
+                  value={releaseConfirmationCode}
+                  onChange={(event) => setReleaseConfirmationCode(event.target.value.toUpperCase())}
+                  autoCapitalize="characters"
+                  placeholder="Confirmation code"
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 uppercase"
+                />
+              </label>
+            )}
 
             <div className="mt-5 flex justify-end">
               <button
                 type="button"
                 onClick={() => releaseMutation.mutate()}
-                disabled={releaseMutation.isPending || !reviewForm.comment.trim()}
+                disabled={releaseMutation.isPending || !reviewForm.comment.trim() || (releaseNeedsConfirmationCode && !releaseConfirmationCode.trim())}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
               >
                 {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
