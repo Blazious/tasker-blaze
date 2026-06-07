@@ -45,11 +45,20 @@ FUNDED_EVENTS = {
 RELEASED_STATES = {
     "complete",
     "completed",
+    "completed_successfully",
+    "completion_successful",
+    "escrow_complete",
+    "escrow_completed",
+    "escrow_completed_successfully",
     "released",
     "release",
+    "release_complete",
+    "release_completed",
     "closed",
     "settled",
     "paid_out",
+    "payout_complete",
+    "payout_completed",
 }
 RELEASED_EVENTS = {
     "funds.released",
@@ -57,15 +66,26 @@ RELEASED_EVENTS = {
     "funds_released",
     "escrow_released",
     "transaction.completed",
+    "transaction_completed",
+    "escrow.completed",
+    "escrow_completed",
 }
 STATUS_FIELD_KEYS = {
     "status",
     "state",
+    "display_status",
+    "status_text",
+    "status_label",
     "payment_status",
     "transaction_status",
     "escrow_status",
     "payment_state",
     "escrow_state",
+}
+RELEASE_TEXT_FIELD_KEYS = STATUS_FIELD_KEYS | {
+    "message",
+    "title",
+    "summary",
 }
 def _collect_external_values(payload, keys):
     values = []
@@ -104,10 +124,7 @@ def unwrap_econfirm_payload(payload):
 
 def econfirm_payload_is_funded(payload):
     payload = unwrap_econfirm_payload(payload)
-    status_values = _collect_external_values(
-        payload,
-        STATUS_FIELD_KEYS,
-    )
+    status_values = _collect_external_values(payload, STATUS_FIELD_KEYS)
     event_values = _collect_external_values(payload, {"event", "event_type", "type"})
     normalized_statuses = [_normalize_external_value(value) for value in status_values]
     normalized_events = [_normalize_external_value(value) for value in event_values]
@@ -133,19 +150,25 @@ def econfirm_payload_is_released(payload):
     payload = unwrap_econfirm_payload(payload)
     status_values = _collect_external_values(
         payload,
-        STATUS_FIELD_KEYS,
+        RELEASE_TEXT_FIELD_KEYS,
     )
     event_values = _collect_external_values(payload, {"event", "event_type", "type"})
     normalized_statuses = [_normalize_external_value(value) for value in status_values]
     normalized_events = [_normalize_external_value(value) for value in event_values]
     return any(
         value in RELEASED_STATES
+        or "completed_successfully" in value
+        or "escrow_completed" in value
+        or "release_completed" in value
+        or "payout_completed" in value
         or "released" in value
         or "funds_released" in value
         or "escrow_released" in value
         for value in normalized_statuses
     ) or any(
         value in RELEASED_EVENTS
+        or "transaction_completed" in value
+        or "escrow_completed" in value
         or "released" in value
         or "funds_released" in value
         or "escrow_released" in value

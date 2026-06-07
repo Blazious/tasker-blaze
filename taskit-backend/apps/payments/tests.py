@@ -314,6 +314,32 @@ class PaymentTestCase(TestCase):
         self.assertEqual(transaction.mpesa_receipt_number, "TH12ABC3DE4")
         self.assertEqual(transaction.econfirm_confirmation_code, "UF7I66W7JS")
 
+    def test_econfirm_completed_successfully_counts_as_released(self):
+        from apps.payments.escrow import econfirm_payload_is_released
+
+        self.assertTrue(
+            econfirm_payload_is_released(
+                {
+                    "success": True,
+                    "data": {
+                        "id": "txn_HSU6JN5R2AZ1",
+                        "status": "completed_successfully",
+                    },
+                }
+            )
+        )
+        self.assertTrue(
+            econfirm_payload_is_released(
+                {
+                    "success": True,
+                    "data": {
+                        "id": "txn_HSU6JN5R2AZ1",
+                        "status": "Escrow completed successfully",
+                    },
+                }
+            )
+        )
+
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
     def test_release_endpoint_keeps_synced_confirmation_code_for_manual_release(
