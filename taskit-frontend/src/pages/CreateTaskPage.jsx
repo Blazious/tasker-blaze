@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -76,6 +76,8 @@ export default function CreateTaskPage() {
   const [form, setForm] = useState(initialForm)
   const [error, setError] = useState('')
   const [currentLocation, setCurrentLocation] = useState(null)
+  const [isPostingTask, setIsPostingTask] = useState(false)
+  const postingTaskRef = useRef(false)
 
   const categoriesQuery = useQuery({
     queryKey: ['task-categories'],
@@ -192,7 +194,13 @@ export default function CreateTaskPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault()
+    if (postingTaskRef.current || isPostingTask || createMutation.isPending) {
+      toast('Task is posting. Please wait.')
+      return
+    }
     if (!validateStep()) return
+    postingTaskRef.current = true
+    setIsPostingTask(true)
 
     let actorLocation = currentLocation
     try {
@@ -201,6 +209,8 @@ export default function CreateTaskPage() {
       const actorStatus = getGeofenceStatus(actorLocation.latitude, actorLocation.longitude)
       if (actorStatus.level === 'blocked') {
         setError(actorStatus.message)
+        postingTaskRef.current = false
+        setIsPostingTask(false)
         return
       }
       if (actorStatus.level === 'warning') {
@@ -218,8 +228,15 @@ export default function CreateTaskPage() {
       payload.append('actor_latitude', Number(actorLocation.latitude).toFixed(6))
       payload.append('actor_longitude', Number(actorLocation.longitude).toFixed(6))
     }
-    createMutation.mutate(payload)
+    createMutation.mutate(payload, {
+      onSettled: () => {
+        postingTaskRef.current = false
+        setIsPostingTask(false)
+      },
+    })
   }
+
+  const isSubmitLocked = isPostingTask || createMutation.isPending
 
   return (
     <section className="mx-auto max-w-4xl">
@@ -477,9 +494,9 @@ export default function CreateTaskPage() {
               Continue
             </button>
           ) : (
-            <button type="submit" disabled={createMutation.isPending} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
-              {createMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
-              Post Task
+            <button type="submit" disabled={isSubmitLocked} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
+              {isSubmitLocked ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+              {isSubmitLocked ? 'Posting...' : 'Post Task'}
             </button>
           )}
         </div>

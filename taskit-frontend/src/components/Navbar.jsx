@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, LogOut, Menu, ShieldCheck, User, X } from 'lucide-react'
+import { Bell, LogOut, Menu, PlusCircle, ShieldCheck, User, X } from 'lucide-react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '../store/authStore.js'
@@ -97,6 +97,15 @@ function Navbar() {
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
+          {!isAdmin && isAuthenticated && (
+            <Link
+              to="/tasks/new"
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f6b3c]"
+            >
+              <PlusCircle size={16} />
+              Post Task
+            </Link>
+          )}
           {!isAdmin && <InviteButton className="inline-flex items-center gap-2 rounded-md bg-[#25D366] px-3 py-2 text-sm font-medium text-white hover:bg-[#1ebe5d]" />}
           {isAuthenticated ? (
             <button
@@ -130,6 +139,16 @@ function Navbar() {
       {isOpen && (
         <div className="border-t border-slate-200 bg-white px-4 py-3 md:hidden">
           <div className="flex flex-col gap-2">
+            {!isAdmin && isAuthenticated && (
+              <Link
+                to="/tasks/new"
+                onClick={() => setIsOpen(false)}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white"
+              >
+                <PlusCircle size={16} />
+                Post Task
+              </Link>
+            )}
             {visibleNavItems.map((item) => (
               <NavLink
                 key={item.to}
