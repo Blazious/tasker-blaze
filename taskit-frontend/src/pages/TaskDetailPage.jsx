@@ -705,12 +705,15 @@ export default function TaskDetailPage() {
           isTaskerAssigned={isAssignedTasker}
           markCompleteMutation={markCompleteMutation}
           onOpenReviewRelease={async () => {
-            setReleaseNeedsConfirmationCode(true)
+            setReleaseNeedsConfirmationCode(false)
+            setReleaseConfirmationCode('')
             setIsReviewReleaseModalOpen(true)
             try {
               const status = await getPaymentStatus(taskId)
-              const prefilled = status.mpesa_receipt_number || status.econfirm_confirmation_code || ''
-              setReleaseConfirmationCode(prefilled)
+              const prefilled = status.econfirm_confirmation_code || status.mpesa_receipt_number || ''
+              if (prefilled) {
+                setReleaseConfirmationCode(String(prefilled).trim().toUpperCase())
+              }
             } catch {
               setReleaseConfirmationCode('')
             }
