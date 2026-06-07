@@ -344,6 +344,51 @@ class PaymentTestCase(TestCase):
         mock_release.assert_called_once()
         self.assertEqual(mock_release.call_args.kwargs["confirmation_code"], "UF7I66W2OT")
 
+    @patch("apps.payments.econfirm.EconfirmClient.release_funds")
+    @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
+    @patch("apps.payments.escrow.send_notification")
+    def test_release_endpoint_uses_confirmation_code_from_buyer_confirmed_webhook(
+        self,
+        _mock_notify,
+        mock_status,
+        mock_release,
+    ):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["status", "tasker_completed_at", "updated_at"])
+        mock_status.return_value = None
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_buyer_confirmed_release"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+
+        callback_response = api_client.post(
+            "/api/v1/payments/econfirm-callback/",
+            {
+                "event": "buyer_confirmed",
+                "transaction_id": "txn_buyer_confirmed_release",
+                "confirmation_code": "webhook123",
+                "confirmed_at": "2026-06-07T10:30:00Z",
+            },
+            format="json",
+        )
+        transaction.refresh_from_db()
+
+        self.assertEqual(callback_response.status_code, 200)
+        self.assertEqual(transaction.econfirm_confirmation_code, "WEBHOOK123")
+        self.assertIsNotNone(transaction.buyer_confirmed_at)
+        self.assertIsNotNone(transaction.econfirm_webhook_received_at)
+        self.assertTrue(transaction.can_release())
+
+        api_client.force_authenticate(self.client_user)
+        release_response = api_client.post(f"/api/v1/payments/release/{self.task.id}/")
+        transaction.refresh_from_db()
+
+        self.assertEqual(release_response.status_code, 200)
+        self.assertEqual(transaction.status, Transaction.Status.RELEASED)
+        mock_release.assert_called_once()
+        self.assertEqual(mock_release.call_args.kwargs["confirmation_code"], "WEBHOOK123")
+
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
     def test_payment_status_reconciles_manual_dashboard_release(self, _mock_notify, mock_status):
@@ -491,6 +536,32 @@ class PaymentTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
         self.assertEqual(transaction.econfirm_confirmation_code, "QCP456")
+
+    @patch("apps.payments.escrow.send_notification")
+    def test_econfirm_callback_marks_buyer_confirmed_webhook_received(self, _mock_notify):
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_buyer_confirmed_123"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/payments/econfirm-callback/",
+            {
+                "event": "buyer_confirmed",
+                "transaction_id": "txn_buyer_confirmed_123",
+                "confirmation_code": "ABC123XYZ",
+                "confirmed_at": "2026-06-07T10:30:00Z",
+            },
+            format="json",
+        )
+        transaction.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
+        self.assertEqual(transaction.econfirm_confirmation_code, "ABC123XYZ")
+        self.assertIsNotNone(transaction.buyer_confirmed_at)
+        self.assertIsNotNone(transaction.econfirm_webhook_received_at)
+        self.assertTrue(transaction.has_confirmation_code())
 
     @patch("apps.payments.escrow.send_notification")
     def test_econfirm_callback_reconciles_manual_release_and_tracks_billing(self, _mock_notify):

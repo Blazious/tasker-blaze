@@ -58,6 +58,8 @@ class Transaction(models.Model):
     econfirm_checkout_request_id = models.CharField(max_length=255, blank=True)
     mpesa_receipt_number = models.CharField(max_length=100, blank=True)
     econfirm_confirmation_code = models.CharField(max_length=100, blank=True)
+    buyer_confirmed_at = models.DateTimeField(null=True, blank=True)
+    econfirm_webhook_received_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     released_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -83,6 +85,12 @@ class Transaction(models.Model):
 
     def __str__(self):
         return f"Transaction #{self.pk} for {self.task}"
+
+    def has_confirmation_code(self):
+        return bool(self.econfirm_confirmation_code)
+
+    def can_release(self):
+        return self.status == self.Status.ESCROWED and self.has_confirmation_code()
 
 
 class EscrowLedger(models.Model):

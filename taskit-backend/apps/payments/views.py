@@ -5,6 +5,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -49,6 +50,22 @@ def _first_payload_value(payload, *keys):
             if value not in (None, ""):
                 return str(value)
     return ""
+
+
+def _payload_datetime(payload, *keys):
+    value = _first_payload_value(payload, *keys)
+    if not value:
+        return None
+    parsed = parse_datetime(value)
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _normalized_event(value):
+    return str(value).strip().lower().replace("-", "_").replace(" ", "_")
 
 
 class PaymentsHealthView(APIView):
@@ -218,11 +235,31 @@ class EconfirmCallbackView(APIView):
             if transaction is None:
                 return Response({"error": "Transaction not found"}, status=404)
 
+            now = timezone.now()
+            transaction.econfirm_webhook_received_at = now
+            transaction.save(update_fields=["econfirm_webhook_received_at", "updated_at"])
+
             persist_payment_references(transaction, payload)
+            transaction.refresh_from_db()
             payment_method = _first_payload_value(payload, "payment_method", "method")
             if payment_method:
                 transaction.payment_method = payment_method
                 transaction.save(update_fields=["payment_method", "updated_at"])
+
+            if _normalized_event(event_type) in {
+                "buyer_confirmed",
+                "buyer.confirmed",
+                "delivery_confirmed",
+                "delivery.confirmed",
+                "task_confirmed",
+            }:
+                confirmed_at = _payload_datetime(payload, "confirmed_at", "buyer_confirmed_at")
+                update_fields = ["buyer_confirmed_at", "updated_at"]
+                transaction.buyer_confirmed_at = confirmed_at or transaction.buyer_confirmed_at or now
+                if transaction.econfirm_webhook_received_at is None:
+                    transaction.econfirm_webhook_received_at = now
+                    update_fields.append("econfirm_webhook_received_at")
+                transaction.save(update_fields=update_fields)
 
             if econfirm_payload_is_funded(payload) or econfirm_payload_is_released(payload):
                 reconcile_transaction_from_econfirm_payload(transaction, payload)
@@ -266,6 +303,10 @@ class PaymentStatusView(APIView):
                 "provider": transaction.payment_provider,
                 "mpesa_receipt_number": transaction.mpesa_receipt_number,
                 "econfirm_confirmation_code": transaction.econfirm_confirmation_code,
+                "buyer_confirmed_at": transaction.buyer_confirmed_at,
+                "econfirm_webhook_received_at": transaction.econfirm_webhook_received_at,
+                "has_confirmation_code": transaction.has_confirmation_code(),
+                "can_release": transaction.can_release(),
                 "external_status": external_status,
                 "synced": synced,
             }
@@ -345,10 +386,11 @@ class ReleasePaymentView(APIView):
                 raise ValidationError(
                     {
                         "message": (
-                            "eConfirm needs the payment confirmation code before release. "
-                            "Use the release confirmation code shown in eConfirm. If eConfirm shows none, try the M-Pesa receipt from the funding SMS."
+                            "Buyer confirmation has not reached TaskiT yet. "
+                            "Ask the client to confirm delivery in eConfirm, then try release again after the webhook is received."
                         ),
                         "requires_confirmation_code": True,
+                        "waiting_for_buyer_confirmation": True,
                     }
                 ) from exc
             if "invalid confirmation" in error_text or "confirmation code" in error_text:
