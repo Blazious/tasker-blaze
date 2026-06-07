@@ -82,6 +82,9 @@ class TaskSerializer(serializers.ModelSerializer):
     payment_status = serializers.SerializerMethodField()
     payment_provider = serializers.SerializerMethodField()
     payment_amount = serializers.SerializerMethodField()
+    payment_manual_release_pending = serializers.SerializerMethodField()
+    payment_client_approved_release_at = serializers.SerializerMethodField()
+    payment_manual_release_requested_at = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -121,6 +124,9 @@ class TaskSerializer(serializers.ModelSerializer):
             "payment_status",
             "payment_provider",
             "payment_amount",
+            "payment_manual_release_pending",
+            "payment_client_approved_release_at",
+            "payment_manual_release_requested_at",
             "actor_latitude",
             "actor_longitude",
         )
@@ -144,6 +150,9 @@ class TaskSerializer(serializers.ModelSerializer):
             "payment_status",
             "payment_provider",
             "payment_amount",
+            "payment_manual_release_pending",
+            "payment_client_approved_release_at",
+            "payment_manual_release_requested_at",
         )
 
     def get_bid_count(self, obj):
@@ -184,6 +193,18 @@ class TaskSerializer(serializers.ModelSerializer):
     def get_payment_amount(self, obj):
         transaction = getattr(obj, "transaction", None)
         return str(transaction.total_charged) if transaction else None
+
+    def get_payment_manual_release_pending(self, obj):
+        transaction = getattr(obj, "transaction", None)
+        return transaction.manual_release_pending() if transaction else False
+
+    def get_payment_client_approved_release_at(self, obj):
+        transaction = getattr(obj, "transaction", None)
+        return transaction.client_approved_release_at if transaction else None
+
+    def get_payment_manual_release_requested_at(self, obj):
+        transaction = getattr(obj, "transaction", None)
+        return transaction.manual_release_requested_at if transaction else None
 
     def validate(self, attrs):
         request = self.context.get("request")

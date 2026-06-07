@@ -60,6 +60,9 @@ class Transaction(models.Model):
     econfirm_confirmation_code = models.CharField(max_length=100, blank=True)
     buyer_confirmed_at = models.DateTimeField(null=True, blank=True)
     econfirm_webhook_received_at = models.DateTimeField(null=True, blank=True)
+    client_approved_release_at = models.DateTimeField(null=True, blank=True)
+    manual_release_requested_at = models.DateTimeField(null=True, blank=True)
+    manual_release_synced_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     released_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -90,7 +93,10 @@ class Transaction(models.Model):
         return bool(self.econfirm_confirmation_code)
 
     def can_release(self):
-        return self.status == self.Status.ESCROWED and self.has_confirmation_code()
+        return self.status == self.Status.ESCROWED
+
+    def manual_release_pending(self):
+        return bool(self.manual_release_requested_at and self.status == self.Status.ESCROWED)
 
 
 class EscrowLedger(models.Model):

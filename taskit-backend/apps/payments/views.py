@@ -24,7 +24,6 @@ from .escrow import (
     econfirm_payload_is_funded,
     econfirm_payload_is_released,
     reconcile_transaction_from_econfirm_payload,
-    release_funds,
     sync_funds_from_econfirm,
     sync_transaction_from_econfirm,
 )
@@ -66,6 +65,24 @@ def _payload_datetime(payload, *keys):
 
 def _normalized_event(value):
     return str(value).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _econfirm_manual_release_details(transaction):
+    portal_url = getattr(settings, "ECONFIRM_PORTAL_URL", "https://econfirm.co.ke").rstrip("/")
+    return {
+        "portal_url": portal_url,
+        "transaction_id": transaction.econfirm_transaction_id,
+        "checkout_request_id": transaction.econfirm_checkout_request_id,
+        "amount": str(transaction.total_charged),
+        "task_title": transaction.task.title,
+        "client_approved_release_at": transaction.client_approved_release_at,
+        "manual_release_requested_at": transaction.manual_release_requested_at,
+        "instructions": [
+            "Open eConfirm and find this escrow transaction.",
+            "Confirm the task is complete and release the escrow from eConfirm.",
+            "Return to TaskiT and tap Check Release so we can sync the final status.",
+        ],
+    }
 
 
 class PaymentsHealthView(APIView):
@@ -307,6 +324,13 @@ class PaymentStatusView(APIView):
                 "econfirm_webhook_received_at": transaction.econfirm_webhook_received_at,
                 "has_confirmation_code": transaction.has_confirmation_code(),
                 "can_release": transaction.can_release(),
+                "manual_release_pending": transaction.manual_release_pending(),
+                "client_approved_release_at": transaction.client_approved_release_at,
+                "manual_release_requested_at": transaction.manual_release_requested_at,
+                "manual_release_synced_at": transaction.manual_release_synced_at,
+                "manual_release": _econfirm_manual_release_details(transaction)
+                if transaction.manual_release_pending()
+                else None,
                 "external_status": external_status,
                 "synced": synced,
             }
@@ -377,35 +401,25 @@ class ReleasePaymentView(APIView):
         if transaction.status != Transaction.Status.ESCROWED:
             raise ValidationError("Escrow is not funded yet, so funds cannot be released.")
 
-        confirmation_code = request.data.get("confirmation_code") or request.data.get("mpesa_receipt_number") or ""
-        try:
-            release_funds(transaction, confirmation_code=confirmation_code)
-        except ValidationError as exc:
-            error_text = str(exc).lower()
-            if "confirmation_code is required" in error_text:
-                raise ValidationError(
-                    {
-                        "message": (
-                            "Buyer confirmation has not reached TaskiT yet. "
-                            "Ask the client to confirm delivery in eConfirm, then try release again after the webhook is received."
-                        ),
-                        "requires_confirmation_code": True,
-                        "waiting_for_buyer_confirmation": True,
-                    }
-                ) from exc
-            if "invalid confirmation" in error_text or "confirmation code" in error_text:
-                raise ValidationError(
-                    {
-                        "message": (
-                            "eConfirm rejected that confirmation code. "
-                            "Use the release confirmation code shown in eConfirm, not the escrow transaction ID. "
-                            "If eConfirm shows no separate code, confirm with their support which code this escrow expects."
-                        ),
-                        "requires_confirmation_code": True,
-                    }
-                ) from exc
-            raise
-        return Response({"message": "Payment released. Great job!"})
+        now = timezone.now()
+        update_fields = ["manual_release_requested_at", "updated_at"]
+        if transaction.client_approved_release_at is None:
+            transaction.client_approved_release_at = now
+            update_fields.append("client_approved_release_at")
+        transaction.manual_release_requested_at = now
+        transaction.save(update_fields=update_fields)
+
+        return Response(
+            {
+                "message": (
+                    "Release approved in TaskiT. Complete the payout in eConfirm, "
+                    "then tap Check Release so TaskiT can sync the final status."
+                ),
+                "manual_release_required": True,
+                "status": transaction.status,
+                "manual_release": _econfirm_manual_release_details(transaction),
+            }
+        )
 
 
 class DisputePaymentView(APIView):

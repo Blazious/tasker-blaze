@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, Loader2, MapPin, MessageCircle, Send, ShieldCheck, Smartphone, Star, UserRound, X } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, CreditCard, ExternalLink, Loader2, MapPin, MessageCircle, Send, ShieldCheck, Smartphone, Star, UserRound, X } from 'lucide-react'
 import { Circle, MapContainer, Marker, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
@@ -73,6 +73,7 @@ function EscrowWorkflowCard({
   task,
 }) {
   const paymentStatus = task.payment_status
+  const manualReleasePending = Boolean(task.payment_manual_release_pending)
   const escrowFunded = paymentStatus === 'ESCROWED' || paymentStatus === 'RELEASED'
   const fundsHeld = escrowFunded || task.status === 'IN_PROGRESS' || task.status === 'COMPLETED'
   const workStarted = task.status === 'IN_PROGRESS' || task.status === 'COMPLETED'
@@ -200,7 +201,9 @@ function EscrowWorkflowCard({
 
         {fundsHeld && isTaskerAssigned && taskerMarkedComplete && !paymentReleased && (
           <p className="rounded-md bg-blue-50 p-3 text-sm font-medium text-blue-800">
-            Completion sent to the client. Escrow will release after client approval.
+            {manualReleasePending
+              ? 'The client approved release in TaskiT. They still need to complete the payout in eConfirm.'
+              : 'Completion sent to the client. Escrow will release after client approval.'}
           </p>
         )}
 
@@ -213,12 +216,16 @@ function EscrowWorkflowCard({
         {canApproveRelease && (
           <div className="grid gap-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
-              <p className="font-semibold text-text-dark">Tasker says the work is complete</p>
-              <p className="text-text-muted">Leave a review, then approve release. TaskiT uses this to track tasker quality and billing.</p>
+              <p className="font-semibold text-text-dark">{manualReleasePending ? 'Release approved in TaskiT' : 'Tasker says the work is complete'}</p>
+              <p className="text-text-muted">
+                {manualReleasePending
+                  ? 'Finish the payout inside eConfirm, then check release status here.'
+                  : 'Approve release in TaskiT, then complete the actual payout inside eConfirm.'}
+              </p>
             </div>
             <button type="button" onClick={onOpenReviewRelease} disabled={releaseMutation.isPending} className="inline-flex w-fit items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-70">
               {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-              Approve & Release
+              {manualReleasePending ? 'View eConfirm Step' : 'Approve Release'}
             </button>
           </div>
         )}
@@ -262,8 +269,7 @@ export default function TaskDetailPage() {
   const [error, setError] = useState('')
   const [completionNotice, setCompletionNotice] = useState('')
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
-  const [releaseNeedsConfirmationCode, setReleaseNeedsConfirmationCode] = useState(false)
-  const [releaseConfirmationCode, setReleaseConfirmationCode] = useState('')
+  const [manualReleaseInfo, setManualReleaseInfo] = useState(null)
   const [paymentPollingUntil, setPaymentPollingUntil] = useState(0)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isReviewReleaseModalOpen, setIsReviewReleaseModalOpen] = useState(false)
@@ -346,13 +352,20 @@ export default function TaskDetailPage() {
 
   useEffect(() => {
     if (!paymentStatusQuery.data) return
-    if (['ESCROWED', 'RELEASED'].includes(paymentStatusQuery.data.status)) {
+    if (paymentStatusQuery.data.status === 'RELEASED') {
+      window.queueMicrotask(() => setPaymentPollingUntil(0))
+      setManualReleaseInfo(null)
+      setIsReviewReleaseModalOpen(false)
+      toast.success('Payment is released. Reviews are now open.')
+      console.log('TaskiT payment sync:', paymentStatusQuery.data)
+      refreshTaskWorkflow()
+    } else if (shouldAutoPollPayment && paymentStatusQuery.data.status === 'ESCROWED') {
       window.queueMicrotask(() => setPaymentPollingUntil(0))
       toast.success('Escrow funded. The tasker has been notified.')
       console.log('TaskiT payment sync:', paymentStatusQuery.data)
       refreshTaskWorkflow()
     }
-  }, [paymentStatusQuery.data, refreshTaskWorkflow])
+  }, [paymentStatusQuery.data, refreshTaskWorkflow, shouldAutoPollPayment])
 
   const checkPaymentMutation = useMutation({
     mutationFn: () => getPaymentStatus(taskId),
@@ -363,8 +376,14 @@ export default function TaskDetailPage() {
         setError('')
         refreshTaskWorkflow()
       } else if (data.status === 'ESCROWED') {
-        toast.success('Escrow funded. The tasker can start work.')
-        setError('')
+        if (data.manual_release_pending) {
+          setManualReleaseInfo(data.manual_release)
+          toast('eConfirm has not reported the payout as released yet.')
+          setError('Release is approved in TaskiT. Complete the payout in eConfirm, then check again.')
+        } else {
+          toast.success('Escrow funded. The tasker can start work.')
+          setError('')
+        }
         refreshTaskWorkflow()
       } else {
         const message = data.external_status ? `eConfirm status: ${data.external_status?.data?.status || data.external_status?.status || data.status}` : `Payment status: ${data.status}`
@@ -475,36 +494,24 @@ export default function TaskDetailPage() {
 
   const releaseMutation = useMutation({
     mutationFn: async () => {
-      if (isClient && !reviewForm.comment.trim()) {
-        throw new Error('Please leave a short review before approving release.')
-      }
-      const confirmationCode = releaseConfirmationCode.trim().toUpperCase()
-      const releasePayload = confirmationCode ? { confirmation_code: confirmationCode } : {}
-      const releaseResponse = await releasePayment(taskId, releasePayload)
-      if (isClient) {
-        const reviewResponse = await submitReview(taskId, buildReviewPayload())
-        return { releaseResponse, reviewResponse }
-      }
+      const releaseResponse = await releasePayment(taskId)
       return { releaseResponse }
     },
     onSuccess: (data) => {
       console.log('TaskiT release response:', data)
-      toast.success(isClient ? 'Payment released and review submitted.' : 'Payment released. You can now leave a review.')
-      setReviewSubmitted(Boolean(isClient))
-      setIsReviewReleaseModalOpen(false)
-      setReleaseNeedsConfirmationCode(false)
-      setReleaseConfirmationCode('')
+      const releaseResponse = data.releaseResponse
+      if (releaseResponse?.manual_release_required) {
+        setManualReleaseInfo(releaseResponse.manual_release)
+        toast.success('Release approved. Complete the payout in eConfirm.')
+      } else {
+        toast.success('Payment released. You can now leave a review.')
+        setIsReviewReleaseModalOpen(false)
+      }
+      setPaymentPollingUntil(Date.now() + 180000)
       refreshTaskWorkflow()
     },
     onError: (mutationError) => {
-      if (mutationError?.response?.data?.requires_confirmation_code) {
-        setReleaseNeedsConfirmationCode(true)
-        const message = mutationError.response.data.message || 'Enter the eConfirm release confirmation code to release this escrow.'
-        setError(message)
-        toast.error(message)
-        return
-      }
-      const message = getApiErrorMessage(mutationError, mutationError.message || 'Could not release payment.')
+      const message = getApiErrorMessage(mutationError, mutationError.message || 'Could not approve release.')
       setError(message)
       toast.error(message)
     },
@@ -705,17 +712,15 @@ export default function TaskDetailPage() {
           isTaskerAssigned={isAssignedTasker}
           markCompleteMutation={markCompleteMutation}
           onOpenReviewRelease={async () => {
-            setReleaseNeedsConfirmationCode(false)
-            setReleaseConfirmationCode('')
+            setManualReleaseInfo(null)
             setIsReviewReleaseModalOpen(true)
             try {
               const status = await getPaymentStatus(taskId)
-              const prefilled = status.econfirm_confirmation_code || status.mpesa_receipt_number || ''
-              if (prefilled) {
-                setReleaseConfirmationCode(String(prefilled).trim().toUpperCase())
+              if (status.manual_release) {
+                setManualReleaseInfo(status.manual_release)
               }
             } catch {
-              setReleaseConfirmationCode('')
+              setManualReleaseInfo(null)
             }
           }}
           onOpenPayment={() => setIsPaymentModalOpen(true)}
@@ -904,65 +909,75 @@ export default function TaskDetailPage() {
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-primary">
-                <Star size={22} />
+                <ShieldCheck size={22} />
               </span>
               <div>
-                <h2 className="text-xl font-semibold text-text-dark">Review before release</h2>
+                <h2 className="text-xl font-semibold text-text-dark">Approve release</h2>
                 <p className="mt-1 text-sm text-text-muted">
-                  Your review is required before TaskiT releases escrow and records the billing event.
+                  TaskiT will record your approval. The actual payout must still be completed in eConfirm.
                 </p>
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-              {reviewRatingFields.map((field) => (
-                <RatingInput
-                  key={field.key}
-                  label={field.label}
-                  value={reviewForm[field.key]}
-                  onChange={(rating) => setReviewForm((current) => ({ ...current, [field.key]: rating }))}
-                />
-              ))}
+            <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+              <p className="font-semibold text-text-dark">{task.title}</p>
+              <p className="text-text-muted">Amount: KES {acceptedBid?.amount || task.payment_amount}</p>
+              {manualReleaseInfo?.transaction_id && (
+                <div className="rounded-md bg-white p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">eConfirm transaction ID</p>
+                  <p className="mt-1 break-all font-mono text-sm font-semibold text-text-dark">{manualReleaseInfo.transaction_id}</p>
+                </div>
+              )}
+              <div className="grid gap-2 text-text-muted">
+                <p>1. Approve the release in TaskiT.</p>
+                <p>2. Open eConfirm and release this escrow from their portal.</p>
+                <p>3. Return here and tap Check Release so TaskiT can sync completion.</p>
+              </div>
             </div>
 
-            <label className="mt-4 block">
-              <span className="text-sm font-semibold text-text-dark">Review</span>
-              <textarea
-                value={reviewForm.comment}
-                onChange={(event) => setReviewForm((current) => ({ ...current, comment: event.target.value }))}
-                maxLength={500}
-                rows={4}
-                placeholder="Write a short review"
-                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2"
-              />
-            </label>
-
-            {releaseNeedsConfirmationCode && (
-              <label className="mt-4 block">
-                <span className="text-sm font-semibold text-text-dark">eConfirm release confirmation code</span>
-                <p className="mt-1 text-xs text-text-muted">
-                  Use the code shown on the eConfirm transaction page. If none is shown, try the M-Pesa receipt from the funding SMS.
-                </p>
-                <input
-                  type="text"
-                  value={releaseConfirmationCode}
-                  onChange={(event) => setReleaseConfirmationCode(event.target.value.toUpperCase())}
-                  autoCapitalize="characters"
-                  placeholder="Confirmation code"
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 uppercase"
-                />
-              </label>
+            {manualReleaseInfo && (
+              <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Release is approved in TaskiT. Complete the payout in eConfirm, then check release status here.
+              </div>
             )}
 
-            <div className="mt-5 flex justify-end">
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsReviewReleaseModalOpen(false)}
+                className="rounded-md border border-slate-200 px-4 py-2 font-semibold text-text-dark"
+              >
+                Close
+              </button>
+              {manualReleaseInfo?.portal_url && (
+                <button
+                  type="button"
+                  onClick={() => window.open(manualReleaseInfo.portal_url, '_blank', 'noopener,noreferrer')}
+                  className="inline-flex items-center gap-2 rounded-md border border-primary px-4 py-2 font-semibold text-primary"
+                >
+                  <ExternalLink size={18} />
+                  Open eConfirm
+                </button>
+              )}
+              {manualReleaseInfo && (
+                <button
+                  type="button"
+                  onClick={() => checkPaymentMutation.mutate()}
+                  disabled={checkPaymentMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
+                >
+                  {checkPaymentMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                  Check Release
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => releaseMutation.mutate()}
-                disabled={releaseMutation.isPending || !reviewForm.comment.trim() || (releaseNeedsConfirmationCode && !releaseConfirmationCode.trim())}
+                disabled={releaseMutation.isPending || Boolean(manualReleaseInfo)}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
               >
                 {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                Submit Review & Release
+                Approve Release
               </button>
             </div>
           </div>

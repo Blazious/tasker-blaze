@@ -190,6 +190,7 @@ PESAPAL_IPN_URL = config("PESAPAL_IPN_URL", default="")
 
 ECONFIRM_API_KEY = config("ECONFIRM_API_KEY", default="")
 ECONFIRM_BASE_URL = config("ECONFIRM_BASE_URL", default="https://econfirm.co.ke/api/v1")
+ECONFIRM_PORTAL_URL = config("ECONFIRM_PORTAL_URL", default="https://econfirm.co.ke")
 ECONFIRM_CALLBACK_URL = config("ECONFIRM_CALLBACK_URL", default="")
 ECONFIRM_PLATFORM_FEE_PERCENT = config("PLATFORM_FEE_PERCENT", default=10, cast=int)
 ECONFIRM_MOCK = config("ECONFIRM_MOCK", default="False").lower() in {

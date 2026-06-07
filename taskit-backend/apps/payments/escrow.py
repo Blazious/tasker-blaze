@@ -269,7 +269,8 @@ def mark_funds_released_from_econfirm(transaction, payload=None):
 
     transaction.status = Transaction.Status.RELEASED
     transaction.released_at = transaction.released_at or now
-    transaction.save(update_fields=["status", "released_at", "updated_at"])
+    transaction.manual_release_synced_at = transaction.manual_release_synced_at or now
+    transaction.save(update_fields=["status", "released_at", "manual_release_synced_at", "updated_at"])
 
     task.status = Task.Status.COMPLETED
     task.completed_at = task.completed_at or now
