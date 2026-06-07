@@ -262,6 +262,7 @@ export default function TaskDetailPage() {
   const [error, setError] = useState('')
   const [completionNotice, setCompletionNotice] = useState('')
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
+  const [releaseConfirmationCode, setReleaseConfirmationCode] = useState('')
   const [paymentPollingUntil, setPaymentPollingUntil] = useState(0)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [isReviewReleaseModalOpen, setIsReviewReleaseModalOpen] = useState(false)
@@ -476,7 +477,11 @@ export default function TaskDetailPage() {
       if (isClient && !reviewForm.comment.trim()) {
         throw new Error('Please leave a short review before approving release.')
       }
-      const releaseResponse = await releasePayment(taskId)
+      const confirmationCode = releaseConfirmationCode.trim().toUpperCase()
+      if (isClient && !confirmationCode) {
+        throw new Error('Enter the M-Pesa confirmation code before approving release.')
+      }
+      const releaseResponse = await releasePayment(taskId, { confirmation_code: confirmationCode })
       if (isClient) {
         const reviewResponse = await submitReview(taskId, buildReviewPayload())
         return { releaseResponse, reviewResponse }
@@ -488,6 +493,7 @@ export default function TaskDetailPage() {
       toast.success(isClient ? 'Payment released and review submitted.' : 'Payment released. You can now leave a review.')
       setReviewSubmitted(Boolean(isClient))
       setIsReviewReleaseModalOpen(false)
+      setReleaseConfirmationCode('')
       refreshTaskWorkflow()
     },
     onError: (mutationError) => {
@@ -875,7 +881,7 @@ export default function TaskDetailPage() {
 
       {isReviewReleaseModalOpen && isClient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
             <div className="flex items-start gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-primary">
                 <Star size={22} />
@@ -911,11 +917,23 @@ export default function TaskDetailPage() {
               />
             </label>
 
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-text-dark">M-Pesa confirmation code</span>
+              <input
+                type="text"
+                value={releaseConfirmationCode}
+                onChange={(event) => setReleaseConfirmationCode(event.target.value.toUpperCase())}
+                autoCapitalize="characters"
+                placeholder="e.g. QG12ABC345"
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 uppercase"
+              />
+            </label>
+
             <div className="mt-5 flex justify-end">
               <button
                 type="button"
                 onClick={() => releaseMutation.mutate()}
-                disabled={releaseMutation.isPending || !reviewForm.comment.trim()}
+                disabled={releaseMutation.isPending || !reviewForm.comment.trim() || !releaseConfirmationCode.trim()}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
               >
                 {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
