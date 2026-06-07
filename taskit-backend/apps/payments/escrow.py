@@ -2,13 +2,19 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction as db_transaction
 from django.utils import timezone
+from rest_framework.exceptions import ValidationError
 
 from apps.notifications.utils import send_notification
 from apps.notifications.models import Notification
 from apps.tasks.models import Task
 
 from .billing import track_platform_fee
-from .econfirm import EconfirmClient
+from .econfirm import (
+    EconfirmClient,
+    normalize_confirmation_code,
+    persist_payment_references,
+    resolve_release_confirmation_codes,
+)
 from .models import EscrowLedger, Transaction
 
 
@@ -61,17 +67,6 @@ STATUS_FIELD_KEYS = {
     "payment_state",
     "escrow_state",
 }
-CONFIRMATION_FIELD_KEYS = {
-    "confirmation_code",
-    "mpesa_confirmation_code",
-    "mpesa_receipt",
-    "mpesa_receipt_number",
-    "receipt",
-    "provider_reference",
-    "payment_reference",
-}
-
-
 def _collect_external_values(payload, keys):
     values = []
     if isinstance(payload, dict):
@@ -164,11 +159,8 @@ def reconcile_transaction_from_econfirm_payload(transaction, payload):
 
     payload = unwrap_econfirm_payload(payload)
     changed = False
-    confirmation_code = _first_external_value(payload, CONFIRMATION_FIELD_KEYS)
-    if confirmation_code and not transaction.mpesa_receipt_number:
-        transaction.mpesa_receipt_number = confirmation_code
-        transaction.payment_provider = "ECONFIRM"
-        transaction.save(update_fields=["mpesa_receipt_number", "payment_provider", "updated_at"])
+    references = persist_payment_references(transaction, payload)
+    if references["mpesa_receipt"] or references["econfirm_code"]:
         changed = True
 
     if econfirm_payload_is_released(payload):
@@ -204,6 +196,24 @@ def sync_funds_from_econfirm(transaction):
     external_status, synced = sync_transaction_from_econfirm(transaction)
     transaction.refresh_from_db()
     return external_status, synced and transaction.status == Transaction.Status.ESCROWED
+
+
+def prepare_econfirm_release(transaction, confirmation_code=None):
+    external_status = None
+    if transaction.econfirm_transaction_id:
+        external_status = EconfirmClient().check_transaction_status(
+            transaction.econfirm_transaction_id
+        )
+        if external_status:
+            persist_payment_references(transaction, external_status)
+            transaction.refresh_from_db()
+
+    codes = resolve_release_confirmation_codes(
+        transaction,
+        override=confirmation_code,
+        external_payload=external_status,
+    )
+    return external_status, codes
 
 
 @db_transaction.atomic
@@ -290,12 +300,31 @@ def release_funds(transaction, confirmation_code=None):
     if transaction.status != Transaction.Status.ESCROWED:
         raise ValueError("Only escrowed transactions can be released.")
 
-    if confirmation_code and not transaction.mpesa_receipt_number:
-        transaction.mpesa_receipt_number = confirmation_code
-        transaction.save(update_fields=["mpesa_receipt_number", "updated_at"])
+    external_status, resolved_codes = prepare_econfirm_release(
+        transaction,
+        confirmation_code=confirmation_code,
+    )
+    normalized_override = normalize_confirmation_code(confirmation_code)
+    if normalized_override:
+        update_fields = []
+        transaction.econfirm_confirmation_code = normalized_override
+        update_fields.append("econfirm_confirmation_code")
+        if not transaction.mpesa_receipt_number:
+            transaction.mpesa_receipt_number = normalized_override
+            update_fields.append("mpesa_receipt_number")
+        transaction.save(update_fields=[*update_fields, "updated_at"])
 
     if transaction.econfirm_transaction_id:
-        EconfirmClient().release_funds(transaction, confirmation_code=confirmation_code)
+        if not resolved_codes and not normalized_override:
+            raise ValidationError(
+                "confirmation_code is required for eConfirm release. "
+                "Use the M-Pesa receipt from the STK payment SMS or the code shown in eConfirm."
+            )
+        EconfirmClient().release_funds(
+            transaction,
+            confirmation_code=normalized_override or (resolved_codes[0] if resolved_codes else None),
+            external_payload=external_status,
+        )
 
     now = timezone.now()
     task = transaction.task

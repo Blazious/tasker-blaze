@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 from apps.tasks.models import Bid, Task
 
 from .billing import billing_summary, generate_invoice_for_month
-from .econfirm import EconfirmClient
+from .econfirm import EconfirmClient, persist_payment_references
 from .escrow import (
     flag_dispute,
     hold_funds,
@@ -218,30 +218,11 @@ class EconfirmCallbackView(APIView):
             if transaction is None:
                 return Response({"error": "Transaction not found"}, status=404)
 
-            mpesa_receipt = _first_payload_value(
-                payload,
-                "confirmation_code",
-                "mpesa_confirmation_code",
-                "mpesa_receipt",
-                "mpesa_receipt_number",
-                "receipt",
-                "provider_reference",
-                "payment_reference",
-            )
+            persist_payment_references(transaction, payload)
             payment_method = _first_payload_value(payload, "payment_method", "method")
-            if mpesa_receipt:
-                transaction.mpesa_receipt_number = mpesa_receipt
             if payment_method:
                 transaction.payment_method = payment_method
-            transaction.payment_provider = "ECONFIRM"
-            transaction.save(
-                update_fields=[
-                    "mpesa_receipt_number",
-                    "payment_method",
-                    "payment_provider",
-                    "updated_at",
-                ]
-            )
+                transaction.save(update_fields=["payment_method", "updated_at"])
 
             if econfirm_payload_is_funded(payload) or econfirm_payload_is_released(payload):
                 reconcile_transaction_from_econfirm_payload(transaction, payload)
@@ -283,6 +264,8 @@ class PaymentStatusView(APIView):
                 "task_status": task.status,
                 "tasker_completed_at": task.tasker_completed_at,
                 "provider": transaction.payment_provider,
+                "mpesa_receipt_number": transaction.mpesa_receipt_number,
+                "econfirm_confirmation_code": transaction.econfirm_confirmation_code,
                 "external_status": external_status,
                 "synced": synced,
             }
@@ -357,10 +340,25 @@ class ReleasePaymentView(APIView):
         try:
             release_funds(transaction, confirmation_code=confirmation_code)
         except ValidationError as exc:
-            if "confirmation_code is required" in str(exc):
+            error_text = str(exc).lower()
+            if "confirmation_code is required" in error_text:
                 raise ValidationError(
                     {
-                        "message": "eConfirm needs the M-Pesa confirmation code for this escrow before release.",
+                        "message": (
+                            "eConfirm needs the payment confirmation code before release. "
+                            "Use the M-Pesa receipt from your STK payment SMS, or the code shown in eConfirm."
+                        ),
+                        "requires_confirmation_code": True,
+                    }
+                ) from exc
+            if "invalid confirmation" in error_text or "confirmation code" in error_text:
+                raise ValidationError(
+                    {
+                        "message": (
+                            "eConfirm rejected that confirmation code. "
+                            "Use the M-Pesa receipt from your payment SMS (not the escrow transaction ID). "
+                            "If you already paid, open the M-Pesa message and copy the receipt code exactly."
+                        ),
                         "requires_confirmation_code": True,
                     }
                 ) from exc

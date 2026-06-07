@@ -57,6 +57,7 @@ class Transaction(models.Model):
     econfirm_transaction_id = models.CharField(max_length=255, blank=True)
     econfirm_checkout_request_id = models.CharField(max_length=255, blank=True)
     mpesa_receipt_number = models.CharField(max_length=100, blank=True)
+    econfirm_confirmation_code = models.CharField(max_length=100, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     released_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

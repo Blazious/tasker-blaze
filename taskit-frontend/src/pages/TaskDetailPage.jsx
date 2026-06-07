@@ -479,9 +479,6 @@ export default function TaskDetailPage() {
         throw new Error('Please leave a short review before approving release.')
       }
       const confirmationCode = releaseConfirmationCode.trim().toUpperCase()
-      if (releaseNeedsConfirmationCode && !confirmationCode) {
-        throw new Error('Enter the M-Pesa confirmation code before approving release.')
-      }
       const releasePayload = confirmationCode ? { confirmation_code: confirmationCode } : {}
       const releaseResponse = await releasePayment(taskId, releasePayload)
       if (isClient) {
@@ -707,10 +704,16 @@ export default function TaskDetailPage() {
           isPaymentPending={task.payment_status === 'PENDING_PAYMENT'}
           isTaskerAssigned={isAssignedTasker}
           markCompleteMutation={markCompleteMutation}
-          onOpenReviewRelease={() => {
-            setReleaseNeedsConfirmationCode(false)
-            setReleaseConfirmationCode('')
+          onOpenReviewRelease={async () => {
+            setReleaseNeedsConfirmationCode(true)
             setIsReviewReleaseModalOpen(true)
+            try {
+              const status = await getPaymentStatus(taskId)
+              const prefilled = status.mpesa_receipt_number || status.econfirm_confirmation_code || ''
+              setReleaseConfirmationCode(prefilled)
+            } catch {
+              setReleaseConfirmationCode('')
+            }
           }}
           onOpenPayment={() => setIsPaymentModalOpen(true)}
           paymentMutation={paymentMutation}
@@ -931,25 +934,26 @@ export default function TaskDetailPage() {
               />
             </label>
 
-            {releaseNeedsConfirmationCode && (
-              <label className="mt-4 block">
-                <span className="text-sm font-semibold text-text-dark">M-Pesa confirmation code</span>
-                <input
-                  type="text"
-                  value={releaseConfirmationCode}
-                  onChange={(event) => setReleaseConfirmationCode(event.target.value.toUpperCase())}
-                  autoCapitalize="characters"
-                  placeholder="e.g. UF7I66W2OT"
-                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 uppercase"
-                />
-              </label>
-            )}
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-text-dark">Payment confirmation code</span>
+              <p className="mt-1 text-xs text-text-muted">
+                Use the M-Pesa receipt from your STK payment SMS (for example TH12ABC3DE4). If release fails, do not use the escrow transaction ID.
+              </p>
+              <input
+                type="text"
+                value={releaseConfirmationCode}
+                onChange={(event) => setReleaseConfirmationCode(event.target.value.toUpperCase())}
+                autoCapitalize="characters"
+                placeholder="M-Pesa receipt from payment SMS"
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 uppercase"
+              />
+            </label>
 
             <div className="mt-5 flex justify-end">
               <button
                 type="button"
                 onClick={() => releaseMutation.mutate()}
-                disabled={releaseMutation.isPending || !reviewForm.comment.trim() || (releaseNeedsConfirmationCode && !releaseConfirmationCode.trim())}
+                disabled={releaseMutation.isPending || !reviewForm.comment.trim()}
                 className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 font-semibold text-white disabled:opacity-60"
               >
                 {releaseMutation.isPending ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}

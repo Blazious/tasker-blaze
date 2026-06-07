@@ -282,6 +282,35 @@ class PaymentTestCase(TestCase):
         self.assertEqual(transaction.status, Transaction.Status.RELEASED)
         self.assertEqual(self.task.status, Task.Status.COMPLETED)
 
+    def test_extract_payment_references_preserves_confirmation_code_case(self):
+        from apps.payments.econfirm import extract_payment_references, persist_payment_references
+
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        references = extract_payment_references(
+            {
+                "success": True,
+                "data": {
+                    "status": "held",
+                    "confirmation_code": "UF7I66W7JS",
+                    "mpesa_receipt": "TH12ABC3DE4",
+                },
+            }
+        )
+        self.assertEqual(references["mpesa_receipt"], "TH12ABC3DE4")
+        self.assertEqual(references["econfirm_code"], "UF7I66W7JS")
+        persist_payment_references(
+            transaction,
+            {
+                "data": {
+                    "confirmation_code": "UF7I66W7JS",
+                    "mpesa_receipt": "TH12ABC3DE4",
+                }
+            },
+        )
+        transaction.refresh_from_db()
+        self.assertEqual(transaction.mpesa_receipt_number, "TH12ABC3DE4")
+        self.assertEqual(transaction.econfirm_confirmation_code, "UF7I66W7JS")
+
     @patch("apps.payments.econfirm.EconfirmClient.release_funds")
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
@@ -311,11 +340,9 @@ class PaymentTestCase(TestCase):
         transaction.refresh_from_db()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(transaction.mpesa_receipt_number, "UF7I66W2OT")
+        self.assertEqual(transaction.econfirm_confirmation_code, "UF7I66W2OT")
         mock_release.assert_called_once()
-        self.assertEqual(mock_release.call_args.kwargs["confirmation_code"], "")
-        released_transaction = mock_release.call_args.args[0]
-        self.assertEqual(released_transaction.mpesa_receipt_number, "UF7I66W2OT")
+        self.assertEqual(mock_release.call_args.kwargs["confirmation_code"], "UF7I66W2OT")
 
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
@@ -463,7 +490,7 @@ class PaymentTestCase(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(transaction.status, Transaction.Status.ESCROWED)
-        self.assertEqual(transaction.mpesa_receipt_number, "QCP456")
+        self.assertEqual(transaction.econfirm_confirmation_code, "QCP456")
 
     @patch("apps.payments.escrow.send_notification")
     def test_econfirm_callback_reconciles_manual_release_and_tracks_billing(self, _mock_notify):

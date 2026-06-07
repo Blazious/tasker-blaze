@@ -72,6 +72,117 @@ def first_present(*values):
     return ""
 
 
+MPESA_REFERENCE_KEYS = (
+    "mpesa_receipt",
+    "mpesa_receipt_number",
+    "mpesa_confirmation_code",
+    "receipt_number",
+    "trans_id",
+    "transaction_receipt",
+)
+
+ECONFIRM_REFERENCE_KEYS = (
+    "release_confirmation_code",
+    "buyer_confirmation_code",
+    "confirmation_code",
+)
+
+
+def normalize_confirmation_code(value):
+    if value in (None, ""):
+        return ""
+    return str(value).strip().upper()
+
+
+def first_payload_value_raw(payload, keys):
+    if not isinstance(payload, dict):
+        return ""
+
+    containers = [payload]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        containers.append(data)
+    payment = payload.get("payment")
+    if isinstance(payment, dict):
+        containers.append(payment)
+    elif isinstance(data, dict) and isinstance(data.get("payment"), dict):
+        containers.append(data["payment"])
+
+    for container in containers:
+        for key in keys:
+            value = container.get(key)
+            if value not in (None, ""):
+                return str(value).strip()
+
+    for container in containers:
+        for value in container.values():
+            if isinstance(value, dict):
+                nested = first_payload_value_raw(value, keys)
+                if nested:
+                    return nested
+    return ""
+
+
+def extract_payment_references(payload):
+    if not isinstance(payload, dict):
+        return {"mpesa_receipt": "", "econfirm_code": ""}
+
+    mpesa_receipt = normalize_confirmation_code(
+        first_payload_value_raw(payload, MPESA_REFERENCE_KEYS)
+    )
+    econfirm_code = normalize_confirmation_code(
+        first_payload_value_raw(payload, ECONFIRM_REFERENCE_KEYS)
+    )
+    if mpesa_receipt and econfirm_code == mpesa_receipt:
+        econfirm_code = ""
+    return {
+        "mpesa_receipt": mpesa_receipt,
+        "econfirm_code": econfirm_code,
+    }
+
+
+def resolve_release_confirmation_codes(transaction, override=None, external_payload=None):
+    codes = []
+    normalized_override = normalize_confirmation_code(override)
+    if normalized_override:
+        codes.append(normalized_override)
+
+    payload = external_payload
+    if payload is None and transaction.econfirm_transaction_id:
+        payload = EconfirmClient().check_transaction_status(transaction.econfirm_transaction_id)
+
+    if payload:
+        references = extract_payment_references(payload)
+        for value in (references["mpesa_receipt"], references["econfirm_code"]):
+            if value and value not in codes:
+                codes.append(value)
+
+    for stored in (
+        transaction.mpesa_receipt_number,
+        transaction.econfirm_confirmation_code,
+    ):
+        normalized = normalize_confirmation_code(stored)
+        if normalized and normalized not in codes:
+            codes.append(normalized)
+    return codes
+
+
+def persist_payment_references(transaction, payload):
+    references = extract_payment_references(payload)
+    update_fields = []
+    if references["mpesa_receipt"] and references["mpesa_receipt"] != transaction.mpesa_receipt_number:
+        transaction.mpesa_receipt_number = references["mpesa_receipt"]
+        update_fields.append("mpesa_receipt_number")
+    if references["econfirm_code"] and references["econfirm_code"] != transaction.econfirm_confirmation_code:
+        transaction.econfirm_confirmation_code = references["econfirm_code"]
+        update_fields.append("econfirm_confirmation_code")
+    if update_fields:
+        transaction.payment_provider = "ECONFIRM"
+        update_fields.extend(["payment_provider", "updated_at"])
+        transaction.save(update_fields=update_fields)
+    return references
+
+
 class EconfirmClient:
     def __init__(self):
         self.api_key = settings.ECONFIRM_API_KEY
@@ -212,26 +323,54 @@ class EconfirmClient:
             logger.exception("eConfirm status check failed")
             return None
 
-    def release_funds(self, transaction, confirmation_code=None):
+    def release_funds(self, transaction, confirmation_code=None, external_payload=None):
         if self.mock:
             logger.info("MOCK: eConfirm release skipped for transaction %s", transaction.id)
             return {"status": "released"}
 
-        payload = {
-            "notes": (
-                "Client confirmed completion in TaskiT. "
-                "eConfirm releases to the seller configured on the escrow transaction."
-            ),
-        }
-        confirmation_code = confirmation_code or transaction.mpesa_receipt_number
-        if confirmation_code:
-            payload["confirmation_code"] = confirmation_code
-
-        return self._post(
-            f"/transactions/{transaction.econfirm_transaction_id}/release",
-            payload,
-            "Failed to release eConfirm funds",
+        notes = (
+            "Client confirmed completion in TaskiT. "
+            "eConfirm releases to the seller configured on the escrow transaction."
         )
+        codes = resolve_release_confirmation_codes(
+            transaction,
+            override=confirmation_code,
+            external_payload=external_payload,
+        )
+        if not codes:
+            raise ValidationError(
+                "confirmation_code is required for eConfirm release. "
+                "Use the M-Pesa receipt from the STK payment SMS or the code shown in eConfirm."
+            )
+
+        last_error = None
+        for code in codes:
+            payload_variants = [
+                {"confirmation_code": code, "notes": notes},
+                {"mpesa_confirmation_code": code, "notes": notes},
+                {
+                    "confirmation_code": code,
+                    "mpesa_confirmation_code": code,
+                    "notes": notes,
+                },
+            ]
+            for payload in payload_variants:
+                try:
+                    return self._post(
+                        f"/transactions/{transaction.econfirm_transaction_id}/release",
+                        payload,
+                        "Failed to release eConfirm funds",
+                    )
+                except ValidationError as exc:
+                    message = str(exc).lower()
+                    if "invalid confirmation" in message or "confirmation code" in message:
+                        last_error = exc
+                        continue
+                    raise
+
+        if last_error is not None:
+            raise last_error
+        raise ValidationError("Failed to release eConfirm funds.")
 
     def refund_funds(self, transaction, reason):
         if self.mock:
