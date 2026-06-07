@@ -354,7 +354,17 @@ class ReleasePaymentView(APIView):
             raise ValidationError("Escrow is not funded yet, so funds cannot be released.")
 
         confirmation_code = request.data.get("confirmation_code") or request.data.get("mpesa_receipt_number") or ""
-        release_funds(transaction, confirmation_code=confirmation_code)
+        try:
+            release_funds(transaction, confirmation_code=confirmation_code)
+        except ValidationError as exc:
+            if "confirmation_code is required" in str(exc):
+                raise ValidationError(
+                    {
+                        "message": "eConfirm needs the M-Pesa confirmation code for this escrow before release.",
+                        "requires_confirmation_code": True,
+                    }
+                ) from exc
+            raise
         return Response({"message": "Payment released. Great job!"})
 
 
