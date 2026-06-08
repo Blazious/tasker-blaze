@@ -193,6 +193,12 @@ ECONFIRM_BASE_URL = config("ECONFIRM_BASE_URL", default="https://econfirm.co.ke/
 ECONFIRM_PORTAL_URL = config("ECONFIRM_PORTAL_URL", default="https://econfirm.co.ke")
 ECONFIRM_CALLBACK_URL = config("ECONFIRM_CALLBACK_URL", default="")
 ECONFIRM_PLATFORM_FEE_PERCENT = config("PLATFORM_FEE_PERCENT", default=10, cast=int)
+ECONFIRM_AUTO_RELEASE_ENABLED = config("ECONFIRM_AUTO_RELEASE_ENABLED", default="True").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 ECONFIRM_MOCK = config("ECONFIRM_MOCK", default="False").lower() in {
     "1",
     "true",

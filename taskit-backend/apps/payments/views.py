@@ -24,6 +24,7 @@ from .escrow import (
     econfirm_payload_is_funded,
     econfirm_payload_is_released,
     reconcile_transaction_from_econfirm_payload,
+    release_funds,
     sync_funds_from_econfirm,
     sync_transaction_from_econfirm,
 )
@@ -83,6 +84,16 @@ def _econfirm_manual_release_details(transaction):
             "Return to TaskiT and tap Check Release so we can sync the final status.",
         ],
     }
+
+
+def _mark_release_approved(transaction):
+    now = timezone.now()
+    update_fields = ["manual_release_requested_at", "updated_at"]
+    if transaction.client_approved_release_at is None:
+        transaction.client_approved_release_at = now
+        update_fields.append("client_approved_release_at")
+    transaction.manual_release_requested_at = now
+    transaction.save(update_fields=update_fields)
 
 
 class PaymentsHealthView(APIView):
@@ -401,21 +412,41 @@ class ReleasePaymentView(APIView):
         if transaction.status != Transaction.Status.ESCROWED:
             raise ValidationError("Escrow is not funded yet, so funds cannot be released.")
 
-        now = timezone.now()
-        update_fields = ["manual_release_requested_at", "updated_at"]
-        if transaction.client_approved_release_at is None:
-            transaction.client_approved_release_at = now
-            update_fields.append("client_approved_release_at")
-        transaction.manual_release_requested_at = now
-        transaction.save(update_fields=update_fields)
+        _mark_release_approved(transaction)
+
+        auto_release_error = ""
+        if getattr(settings, "ECONFIRM_AUTO_RELEASE_ENABLED", True):
+            confirmation_code = request.data.get("confirmation_code") or request.data.get("mpesa_receipt_number") or ""
+            try:
+                release_funds(transaction, confirmation_code=confirmation_code)
+                transaction.refresh_from_db()
+                return Response(
+                    {
+                        "message": "Payment released through eConfirm. Reviews are now open.",
+                        "manual_release_required": False,
+                        "auto_release_succeeded": True,
+                        "status": transaction.status,
+                    }
+                )
+            except (ValidationError, ValueError) as exc:
+                auto_release_error = "automatic_release_failed"
+                logger.warning(
+                    "eConfirm automatic release failed for transaction %s; falling back to manual release: %s",
+                    transaction.id,
+                    exc,
+                )
+                transaction.refresh_from_db()
 
         return Response(
             {
                 "message": (
-                    "Release approved in TaskiT. Complete the payout in eConfirm, "
-                    "then tap Check Release so TaskiT can sync the final status."
+                    "Release approved in TaskiT. Automatic eConfirm release did not complete, "
+                    "so complete the payout in eConfirm, then tap Check Release so TaskiT can sync the final status."
                 ),
                 "manual_release_required": True,
+                "auto_release_succeeded": False,
+                "auto_release_attempted": getattr(settings, "ECONFIRM_AUTO_RELEASE_ENABLED", True),
+                "auto_release_error": auto_release_error,
                 "status": transaction.status,
                 "manual_release": _econfirm_manual_release_details(transaction),
             }

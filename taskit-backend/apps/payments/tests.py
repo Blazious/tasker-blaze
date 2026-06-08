@@ -262,7 +262,7 @@ class PaymentTestCase(TestCase):
         self.assertIsNotNone(self.task.tasker_completed_at)
         self.assertIsNotNone(response.data["tasker_completed_at"])
 
-    @override_settings(ECONFIRM_MOCK=True)
+    @override_settings(ECONFIRM_MOCK=True, ECONFIRM_AUTO_RELEASE_ENABLED=False)
     @patch("apps.payments.escrow.send_notification")
     def test_client_release_endpoint_records_manual_release_request(self, _mock_notify):
         self.task.status = Task.Status.IN_PROGRESS
@@ -284,6 +284,28 @@ class PaymentTestCase(TestCase):
         self.assertEqual(self.task.status, Task.Status.IN_PROGRESS)
         self.assertIsNotNone(transaction.client_approved_release_at)
         self.assertIsNotNone(transaction.manual_release_requested_at)
+
+    @override_settings(ECONFIRM_MOCK=True, ECONFIRM_AUTO_RELEASE_ENABLED=True)
+    @patch("apps.payments.escrow.send_notification")
+    def test_client_release_endpoint_uses_automatic_release_when_available(self, _mock_notify):
+        self.task.status = Task.Status.IN_PROGRESS
+        self.task.tasker_completed_at = timezone.now()
+        self.task.save(update_fields=["status", "tasker_completed_at", "updated_at"])
+        transaction = self.create_transaction(status=Transaction.Status.ESCROWED)
+        transaction.econfirm_transaction_id = "txn_auto_release"
+        transaction.save(update_fields=["econfirm_transaction_id", "updated_at"])
+        api_client = APIClient()
+        api_client.force_authenticate(self.client_user)
+
+        response = api_client.post(f"/api/v1/payments/release/{self.task.id}/")
+        transaction.refresh_from_db()
+        self.task.refresh_from_db()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["manual_release_required"])
+        self.assertTrue(response.data["auto_release_succeeded"])
+        self.assertEqual(transaction.status, Transaction.Status.RELEASED)
+        self.assertEqual(self.task.status, Task.Status.COMPLETED)
 
     def test_extract_payment_references_preserves_confirmation_code_case(self):
         from apps.payments.econfirm import extract_payment_references, persist_payment_references
@@ -342,6 +364,7 @@ class PaymentTestCase(TestCase):
 
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
+    @override_settings(ECONFIRM_AUTO_RELEASE_ENABLED=False)
     def test_release_endpoint_keeps_synced_confirmation_code_for_manual_release(
         self,
         _mock_notify,
@@ -374,6 +397,7 @@ class PaymentTestCase(TestCase):
 
     @patch("apps.payments.econfirm.EconfirmClient.check_transaction_status")
     @patch("apps.payments.escrow.send_notification")
+    @override_settings(ECONFIRM_AUTO_RELEASE_ENABLED=False)
     def test_release_endpoint_accepts_buyer_confirmed_webhook_before_manual_release(
         self,
         _mock_notify,
@@ -487,7 +511,7 @@ class PaymentTestCase(TestCase):
         profile_response = api_client.get(f"/api/v1/profiles/{self.tasker.id}/")
         self.assertEqual(profile_response.data["recent_reviews"][0]["comment"], "Great laundry service")
 
-    @override_settings(ECONFIRM_MOCK=True)
+    @override_settings(ECONFIRM_MOCK=True, ECONFIRM_AUTO_RELEASE_ENABLED=False)
     @patch("apps.payments.escrow.send_notification")
     def test_release_endpoint_syncs_funded_econfirm_before_manual_release_request(self, _mock_notify):
         self.task.tasker_completed_at = timezone.now()
