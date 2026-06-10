@@ -292,7 +292,6 @@ class EmailAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    @override_settings(EMAIL_VERIFICATION_ENABLED=False)
     def test_normal_email_can_self_register_publicly(self):
         api_client = APIClient()
 
@@ -369,3 +368,33 @@ class EmailAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertFalse(get_user_model().objects.filter(email="mail.fail@gmail.com").exists())
+
+    @override_settings(
+        EMAIL_VERIFICATION_ENABLED=True,
+        RESEND_API_KEY="test-resend-key",
+        RESEND_API_URL="https://api.resend.com/emails",
+        DEFAULT_FROM_EMAIL="TaskiT <admintaskit@gmail.com>",
+    )
+    @patch("apps.accounts.views.requests.post")
+    def test_registration_uses_resend_when_configured(self, mock_post):
+        mock_post.return_value.raise_for_status.return_value = None
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/auth/register/",
+            {
+                "email": "resend.user@gmail.com",
+                "password": "Testpass123!",
+                "full_name": "Resend User",
+                "phone_number": "+254700000014",
+                "gender": "NOT_SPECIFIED",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        mock_post.assert_called_once()
+        _, kwargs = mock_post.call_args
+        self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test-resend-key")
+        self.assertEqual(kwargs["json"]["to"], ["resend.user@gmail.com"])
+        self.assertEqual(kwargs["json"]["from"], "TaskiT <admintaskit@gmail.com>")

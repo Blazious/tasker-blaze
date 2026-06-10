@@ -142,8 +142,11 @@ EMAIL_USE_SSL = config("EMAIL_USE_SSL", default="False").lower() in {
 EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=20, cast=int)
 EMAIL_VERIFICATION_ENABLED = config(
     "EMAIL_VERIFICATION_ENABLED",
-    default="True",
+    default="False",
 ).lower() in {"1", "true", "yes", "on"}
+RESEND_API_KEY = config("RESEND_API_KEY", default="")
+RESEND_API_URL = config("RESEND_API_URL", default="https://api.resend.com/emails")
+RESEND_TIMEOUT = config("RESEND_TIMEOUT", default=20, cast=int)
 ADMIN_EMAIL = config("ADMIN_EMAIL", default="admin@taskit.co.ke")
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:5173").rstrip("/")
 KYC_MOCK = config("KYC_MOCK", default="True").lower() in {"1", "true", "yes", "on"}

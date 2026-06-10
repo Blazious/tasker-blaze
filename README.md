@@ -262,24 +262,13 @@ MINDEE_ENDPOINT_URL=your-mindee-endpoint
 CLOUDINARY_CLOUD_NAME=your-cloudinary-cloud
 CLOUDINARY_API_KEY=your-cloudinary-key
 CLOUDINARY_API_SECRET=your-cloudinary-secret
-DEFAULT_FROM_EMAIL=TaskiT <admintaskit@gmail.com>
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=admintaskit@gmail.com
-EMAIL_HOST_PASSWORD=your-gmail-app-password
-EMAIL_USE_TLS=True
-EMAIL_USE_SSL=False
-EMAIL_TIMEOUT=20
-EMAIL_VERIFICATION_ENABLED=True
+EMAIL_VERIFICATION_ENABLED=False
 ADMIN_EMAIL=admintaskit@gmail.com
 ```
 
-For Gmail SMTP, `EMAIL_HOST_PASSWORD` must be an app password, not your normal
-Google account password. Without SMTP variables, development prints verification
-emails to logs; production should use SMTP so users receive the link in their inbox.
-If Railway cannot reach Gmail on port 587, try port 465 instead with
-`EMAIL_PORT=465`, `EMAIL_USE_TLS=False`, and `EMAIL_USE_SSL=True`.
+For demo deployments, `EMAIL_VERIFICATION_ENABLED=False` lets users log in
+immediately after registration. Email verification can be re-enabled later after
+configuring a production email provider.
 
 Vercel frontend variables:
 

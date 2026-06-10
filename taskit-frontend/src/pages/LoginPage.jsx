@@ -37,7 +37,7 @@ export default function LoginPage() {
       const message = getApiErrorMessage(loginError, 'Login failed. Please check your details.')
       setError(
         message.toLowerCase().includes('verify')
-          ? 'Please verify your email first. Check your inbox.'
+          ? 'This account is not active yet. Please register again or contact support.'
           : message,
       )
     } finally {

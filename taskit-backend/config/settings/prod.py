@@ -7,7 +7,11 @@ DEBUG = False
 
 EMAIL_BACKEND = config(
     "EMAIL_BACKEND",
-    default="django.core.mail.backends.smtp.EmailBackend",
+    default=(
+        "django.core.mail.backends.console.EmailBackend"
+        if RESEND_API_KEY
+        else "django.core.mail.backends.smtp.EmailBackend"
+    ),
 )
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com") or "smtp.gmail.com"
 DEFAULT_FROM_EMAIL = (

@@ -1,5 +1,6 @@
 import logging
 
+import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
@@ -32,6 +33,35 @@ User = get_user_model()
 EMAIL_VERIFICATION_SALT = "accounts.email-verification"
 EMAIL_VERIFICATION_MAX_AGE = 60 * 60 * 24
 logger = logging.getLogger(__name__)
+
+
+def send_account_email(subject, message, recipient):
+    resend_api_key = getattr(settings, "RESEND_API_KEY", "").strip()
+    if resend_api_key:
+        response = requests.post(
+            getattr(settings, "RESEND_API_URL", "https://api.resend.com/emails"),
+            headers={
+                "Authorization": f"Bearer {resend_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": getattr(settings, "DEFAULT_FROM_EMAIL", None),
+                "to": [recipient],
+                "subject": subject,
+                "text": message,
+            },
+            timeout=getattr(settings, "RESEND_TIMEOUT", 20),
+        )
+        response.raise_for_status()
+        return
+
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+        recipient_list=[recipient],
+        fail_silently=False,
+    )
 
 
 class AccountsHealthView(APIView):
@@ -89,16 +119,14 @@ class RegisterView(APIView):
     def send_verification_email(self, request, user):
         token = signing.dumps({"user_id": user.pk}, salt=EMAIL_VERIFICATION_SALT)
         verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-        send_mail(
+        send_account_email(
             subject="Verify your Taskit account",
             message=(
                 "Welcome to Taskit.\n\n"
                 f"Verify your email here: {verification_url}\n\n"
                 "This link expires in 24 hours."
             ),
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[user.email],
-            fail_silently=False,
+            recipient=user.email,
         )
 
 

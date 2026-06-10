@@ -19,7 +19,7 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [registeredEmail, setRegisteredEmail] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const [emailVerificationRequired, setEmailVerificationRequired] = useState(true)
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false)
 
   const updateField = (event) => {
     setForm((current) => ({
