@@ -7,7 +7,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .kyc import normalize_jkuat_college
-from .models import KYCVerification, validate_jkuat_student_email
+from .models import KYCVerification
 
 User = get_user_model()
 
@@ -21,7 +21,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         email = value.lower()
-        validate_jkuat_student_email(email)
+        admin_email = getattr(settings, "ADMIN_EMAIL", "").strip().lower()
+        if admin_email and email == admin_email:
+            raise serializers.ValidationError("This email cannot be used for public registration.")
         return email
 
     def create(self, validated_data):
@@ -33,11 +35,7 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
     def validate_email(self, value):
-        email = value.lower()
-        admin_email = getattr(settings, "ADMIN_EMAIL", "").strip().lower()
-        if email != admin_email:
-            validate_jkuat_student_email(email)
-        return email
+        return value.lower()
 
     def validate(self, attrs):
         user = authenticate(
@@ -49,7 +47,7 @@ class LoginSerializer(serializers.Serializer):
         if user is None:
             raise serializers.ValidationError("Invalid email or password.")
         if not user.is_verified:
-            raise PermissionDenied("Please verify your JKUAT email first.")
+            raise PermissionDenied("Please verify your email first.")
 
         attrs["user"] = user
         return attrs

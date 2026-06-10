@@ -6,17 +6,6 @@ import { getApiErrorMessage } from '../utils/apiError.js'
 import CampusBackdrop from '../components/CampusBackdrop.jsx'
 import { CAMPUS_BACKGROUNDS } from '../constants/campusImages.js'
 
-const JKUAT_DOMAIN = '@students.jkuat.ac.ke'
-const RESERVED_EMAIL_NAMES = new Set(['admin', 'administrator', 'example', 'fake', 'jkuat', 'student', 'support', 'taskit', 'test', 'user'])
-
-function validateStudentEmail(email) {
-  if (!email.endsWith(JKUAT_DOMAIN)) return false
-  const localPart = email.slice(0, -JKUAT_DOMAIN.length)
-  if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(localPart)) return false
-  const compactLocal = localPart.replace(/[^a-z0-9]/g, '')
-  return !RESERVED_EMAIL_NAMES.has(compactLocal)
-}
-
 export default function RegisterPage() {
   const [form, setForm] = useState({
     full_name: '',
@@ -44,10 +33,6 @@ export default function RegisterPage() {
     setError('')
 
     const email = form.email.trim().toLowerCase()
-    if (!validateStudentEmail(email)) {
-      setError('Use your personal JKUAT student email ending in @students.jkuat.ac.ke')
-      return
-    }
 
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match')
@@ -81,7 +66,7 @@ export default function RegisterPage() {
             <MailCheck size={28} />
           </div>
           <h1 className="text-2xl font-semibold text-text-dark">
-            {emailVerificationRequired ? 'Check your JKUAT email!' : 'Account created!'}
+            {emailVerificationRequired ? 'Check your email!' : 'Account created!'}
           </h1>
           <p className="mt-3 text-text-muted">
             {emailVerificationRequired ? (
@@ -107,10 +92,10 @@ export default function RegisterPage() {
     <CampusBackdrop image={CAMPUS_BACKGROUNDS.pau} align="center">
       <div className="grid w-full gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
       <div className="flex flex-col justify-center text-white">
-        <p className="text-sm font-semibold uppercase tracking-wide text-secondary">JKUAT students only · Ingine Mwecheche</p>
-        <h1 className="mt-3 text-4xl font-black leading-tight sm:text-5xl">Join TaskiT with your student email.</h1>
+        <p className="text-sm font-semibold uppercase tracking-wide text-secondary">Campus tasks · Ingine Mwecheche</p>
+        <h1 className="mt-3 text-4xl font-black leading-tight sm:text-5xl">Join TaskiT with your email.</h1>
         <p className="mt-4 max-w-xl text-lg leading-8 text-slate-200">
-          Post campus tasks, earn from skills, and keep every transaction tied to a verified JKUAT student account.
+          Post campus tasks, earn from skills, and keep every transaction tied to a verified account.
         </p>
         <p className="mt-4 w-fit rounded-full bg-white/10 px-3 py-1 text-sm font-black text-secondary backdrop-blur">
           Campus errands, lakini mwecheche.
@@ -125,8 +110,8 @@ export default function RegisterPage() {
           </label>
 
           <label className="grid gap-1.5">
-            <span className="text-sm font-medium text-text-dark">JKUAT Student Email</span>
-            <input name="email" type="email" value={form.email} onChange={updateField} required placeholder={`name${JKUAT_DOMAIN}`} className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-primary" />
+            <span className="text-sm font-medium text-text-dark">Email</span>
+            <input name="email" type="email" value={form.email} onChange={updateField} required placeholder="name@example.com" className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-primary" />
           </label>
 
           <label className="grid gap-1.5">

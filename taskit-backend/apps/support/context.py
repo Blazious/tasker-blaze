@@ -6,7 +6,7 @@ TaskiT is a JKUAT student marketplace for campus tasks. Current tagline: "Ingine
 
 Core platform areas:
 - Human support: users can email TaskiT admin support directly at admintaskit@gmail.com. In the app, clicking the support email opens the user's email client with a new message.
-- Auth: only @students.jkuat.ac.ke emails can register. Users verify email before posting tasks.
+- Auth: users can register with any valid email address. Users verify email before posting tasks.
 - KYC: students can upload front/back student ID and live face image. Mindee extracts ID details; face match can verify ownership.
 - Tasks: clients post tasks with category, budget range, campus landmark, optional draggable map pin/current location, deadline, scheduled start, home-visit flag, and tasker gender preference.
 - Categories: Laundry, Printing & Binding, Food Pickup, Errand Running, Thrifting, House Cleaning, House Hunting, Delivery, Tutoring, Other.

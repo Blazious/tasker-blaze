@@ -1,13 +1,12 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from .kyc import normalize_jkuat_college
-from .models import KYCVerification, validate_jkuat_student_email
+from .models import KYCVerification
 
 
 def tiny_gif(name):
@@ -250,18 +249,7 @@ class KYCVerificationTests(TestCase):
         self.assertFalse(self.user.is_kyc_verified)
 
 
-class StudentEmailAccessTests(TestCase):
-    def test_rejects_non_jkuat_student_domains(self):
-        with self.assertRaises(ValidationError):
-            validate_jkuat_student_email("student@gmail.com")
-
-    def test_rejects_reserved_dummy_local_parts(self):
-        with self.assertRaises(ValidationError):
-            validate_jkuat_student_email("test@students.jkuat.ac.ke")
-
-    def test_accepts_personal_jkuat_student_domain(self):
-        validate_jkuat_student_email("cliptoman@students.jkuat.ac.ke")
-
+class EmailAccessTests(TestCase):
     @override_settings(ADMIN_EMAIL="admintaskit@gmail.com")
     def test_admin_email_can_login_when_created_as_superuser(self):
         User = get_user_model()
@@ -302,6 +290,26 @@ class StudentEmailAccessTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    @override_settings(EMAIL_VERIFICATION_ENABLED=False)
+    def test_normal_email_can_self_register_publicly(self):
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/auth/register/",
+            {
+                "email": "new.user@gmail.com",
+                "password": "Testpass123!",
+                "full_name": "Normal Email User",
+                "phone_number": "+254700000012",
+                "gender": "NOT_SPECIFIED",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        user = get_user_model().objects.get(email="new.user@gmail.com")
+        self.assertTrue(user.is_verified)
 
     @override_settings(ADMIN_EMAIL="admintaskit@gmail.com")
     def test_admin_cannot_activate_tasker_mode(self):

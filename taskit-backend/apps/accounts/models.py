@@ -3,39 +3,6 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-import re
-
-
-JKUAT_STUDENT_EMAIL_DOMAIN = "@students.jkuat.ac.ke"
-RESERVED_STUDENT_EMAIL_NAMES = {
-    "admin",
-    "administrator",
-    "example",
-    "fake",
-    "jkuat",
-    "student",
-    "support",
-    "taskit",
-    "test",
-    "user",
-}
-
-
-def validate_jkuat_student_email(email):
-    normalized_email = (email or "").strip().lower()
-    if "@" not in normalized_email:
-        raise ValidationError("A valid JKUAT student email is required.")
-
-    local_part, _, domain = normalized_email.rpartition("@")
-    if domain != JKUAT_STUDENT_EMAIL_DOMAIN.removeprefix("@"):
-        raise ValidationError("Only JKUAT student emails are allowed.")
-
-    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,63}", local_part):
-        raise ValidationError("Use your official JKUAT student email address.")
-
-    compact_local = re.sub(r"[^a-z0-9]", "", local_part)
-    if compact_local in RESERVED_STUDENT_EMAIL_NAMES:
-        raise ValidationError("Use your personal JKUAT student email address.")
 
 
 class CustomUserManager(BaseUserManager):
@@ -44,9 +11,7 @@ class CustomUserManager(BaseUserManager):
             raise ValueError("The email field must be set.")
 
         email = self.normalize_email(email).lower()
-        allow_non_student_email = extra_fields.pop("allow_non_student_email", False)
-        if not allow_non_student_email:
-            validate_jkuat_student_email(email)
+        extra_fields.pop("allow_non_student_email", None)
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.full_clean()
@@ -119,8 +84,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         super().clean()
         if self.email:
             self.email = self.__class__.objects.normalize_email(self.email).lower()
-        if not (self.is_staff or self.is_superuser):
-            validate_jkuat_student_email(self.email)
 
         if self.year_of_study is not None and self.year_of_study not in range(1, 5):
             raise ValidationError(

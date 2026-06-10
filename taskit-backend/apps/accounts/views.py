@@ -63,7 +63,7 @@ class RegisterView(APIView):
 
         return Response(
             {
-                "message": "Check your JKUAT email to verify your account.",
+                "message": "Check your email to verify your account.",
                 "email_verification_required": True,
             },
             status=status.HTTP_201_CREATED,
@@ -76,7 +76,7 @@ class RegisterView(APIView):
             subject="Verify your Taskit account",
             message=(
                 "Welcome to Taskit.\n\n"
-                f"Verify your JKUAT student email here: {verification_url}\n\n"
+                f"Verify your email here: {verification_url}\n\n"
                 "This link expires in 24 hours."
             ),
             from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),

@@ -37,7 +37,7 @@ export default function LoginPage() {
       const message = getApiErrorMessage(loginError, 'Login failed. Please check your details.')
       setError(
         message.toLowerCase().includes('verify')
-          ? 'Please verify your JKUAT email first. Check your inbox.'
+          ? 'Please verify your email first. Check your inbox.'
           : message,
       )
     } finally {
@@ -54,7 +54,7 @@ export default function LoginPage() {
             Welcome back to the campus network that gets things done.
           </h1>
           <p className="mt-5 text-lg leading-8 text-slate-200">
-            Sign in to post tasks, bid safely, chat with verified students, and keep every handoff tied to JKUAT.
+            Sign in to post tasks, bid safely, chat with verified users, and keep every handoff tied to TaskiT.
           </p>
         </div>
 

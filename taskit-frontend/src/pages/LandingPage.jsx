@@ -57,13 +57,13 @@ const taskStories = [
 
 const steps = [
   ['Post', 'Set the task, campus landmark, budget range, and deadline.'],
-  ['Compare', 'Verified JKUAT students bid with their price and pitch.'],
+  ['Compare', 'Verified users bid with their price and pitch.'],
   ['Pay safely', 'Funds move into escrow after you accept a bid.'],
   ['Complete', 'Chat, finish the task, release payment, then review.'],
 ]
 
 const trustSignals = [
-  [BadgeCheck, 'JKUAT-only access', 'Only @students.jkuat.ac.ke accounts can register and bid.'],
+  [BadgeCheck, 'Email-verified access', 'Users can register with any valid email and verify it before using TaskiT.'],
   [LockKeyhole, 'Escrow-first payments', 'TaskiT holds payment until the client confirms completion.'],
   [ShieldCheck, 'Safety controls', 'SOS access, home-visit warnings, gender preference, and disputes are built in.'],
   [MessageCircle, 'Real-time chat', 'Coordinate details after a bid is accepted without leaving the platform.'],
@@ -107,7 +107,7 @@ export default function LandingPage() {
               Ingine Mwecheche.
             </p>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-100 sm:text-xl">
-              TaskiT connects verified JKUAT students who need quick help with students ready to earn from laundry,
+              TaskiT connects verified users who need quick help with people ready to earn from laundry,
               delivery, printing, cleaning, tutoring, errands, and food pickup.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
