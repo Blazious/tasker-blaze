@@ -262,15 +262,15 @@ MINDEE_ENDPOINT_URL=your-mindee-endpoint
 CLOUDINARY_CLOUD_NAME=your-cloudinary-cloud
 CLOUDINARY_API_KEY=your-cloudinary-key
 CLOUDINARY_API_SECRET=your-cloudinary-secret
-DEFAULT_FROM_EMAIL=TaskiT <your-email@gmail.com>
+DEFAULT_FROM_EMAIL=TaskiT <admintaskit@gmail.com>
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
-EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_USER=admintaskit@gmail.com
 EMAIL_HOST_PASSWORD=your-gmail-app-password
 EMAIL_USE_TLS=True
 EMAIL_VERIFICATION_ENABLED=True
-ADMIN_EMAIL=your-email
+ADMIN_EMAIL=admintaskit@gmail.com
 ```
 
 For Gmail SMTP, `EMAIL_HOST_PASSWORD` must be an app password, not your normal
