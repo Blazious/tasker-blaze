@@ -5,6 +5,27 @@ from .base import *
 
 DEBUG = False
 
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
+if EMAIL_VERIFICATION_ENABLED and EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
+    missing_email_settings = [
+        name
+        for name, value in {
+            "EMAIL_HOST": EMAIL_HOST,
+            "EMAIL_HOST_USER": EMAIL_HOST_USER,
+            "EMAIL_HOST_PASSWORD": EMAIL_HOST_PASSWORD,
+            "DEFAULT_FROM_EMAIL": DEFAULT_FROM_EMAIL,
+        }.items()
+        if not value or value == "noreply@taskit.local"
+    ]
+    if missing_email_settings:
+        raise RuntimeError(
+            "Production email verification requires SMTP settings: "
+            + ", ".join(missing_email_settings)
+        )
+
 
 def normalize_origin(origin):
     return origin.strip().rstrip("/")
