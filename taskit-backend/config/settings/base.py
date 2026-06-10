@@ -133,6 +133,13 @@ EMAIL_USE_TLS = config("EMAIL_USE_TLS", default="True").lower() in {
     "yes",
     "on",
 }
+EMAIL_USE_SSL = config("EMAIL_USE_SSL", default="False").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=20, cast=int)
 EMAIL_VERIFICATION_ENABLED = config(
     "EMAIL_VERIFICATION_ENABLED",
     default="True",

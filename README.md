@@ -269,6 +269,8 @@ EMAIL_PORT=587
 EMAIL_HOST_USER=admintaskit@gmail.com
 EMAIL_HOST_PASSWORD=your-gmail-app-password
 EMAIL_USE_TLS=True
+EMAIL_USE_SSL=False
+EMAIL_TIMEOUT=20
 EMAIL_VERIFICATION_ENABLED=True
 ADMIN_EMAIL=admintaskit@gmail.com
 ```
@@ -276,6 +278,8 @@ ADMIN_EMAIL=admintaskit@gmail.com
 For Gmail SMTP, `EMAIL_HOST_PASSWORD` must be an app password, not your normal
 Google account password. Without SMTP variables, development prints verification
 emails to logs; production should use SMTP so users receive the link in their inbox.
+If Railway cannot reach Gmail on port 587, try port 465 instead with
+`EMAIL_PORT=465`, `EMAIL_USE_TLS=False`, and `EMAIL_USE_SSL=True`.
 
 Vercel frontend variables:
 

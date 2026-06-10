@@ -1,3 +1,4 @@
+from smtplib import SMTPException
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -347,3 +348,24 @@ class EmailAccessTests(TestCase):
         user = get_user_model().objects.get(email="fresh.student@students.jkuat.ac.ke")
         self.assertFalse(user.is_verified)
         self.assertTrue(response.data["email_verification_required"])
+
+    @override_settings(EMAIL_VERIFICATION_ENABLED=True)
+    @patch("apps.accounts.views.send_mail")
+    def test_registration_email_failure_removes_created_user(self, mock_send_mail):
+        mock_send_mail.side_effect = SMTPException("SMTP is unavailable")
+        api_client = APIClient()
+
+        response = api_client.post(
+            "/api/v1/auth/register/",
+            {
+                "email": "mail.fail@gmail.com",
+                "password": "Testpass123!",
+                "full_name": "Mail Failure",
+                "phone_number": "+254700000013",
+                "gender": "NOT_SPECIFIED",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(get_user_model().objects.filter(email="mail.fail@gmail.com").exists())

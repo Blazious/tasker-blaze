@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import signing
@@ -29,6 +31,7 @@ from .models import KYCVerification
 User = get_user_model()
 EMAIL_VERIFICATION_SALT = "accounts.email-verification"
 EMAIL_VERIFICATION_MAX_AGE = 60 * 60 * 24
+logger = logging.getLogger(__name__)
 
 
 class AccountsHealthView(APIView):
@@ -59,7 +62,21 @@ class RegisterView(APIView):
                 status=status.HTTP_201_CREATED,
             )
 
-        self.send_verification_email(request, user)
+        try:
+            self.send_verification_email(request, user)
+        except Exception:
+            logger.exception("Failed to send verification email to %s", user.email)
+            user.delete()
+            return Response(
+                {
+                    "detail": (
+                        "We could not send the verification email right now. "
+                        "Please try again in a few minutes."
+                    ),
+                    "email_verification_required": True,
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         return Response(
             {
